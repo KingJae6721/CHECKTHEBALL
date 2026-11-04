@@ -1,0 +1,38 @@
+{
+  "name": "check-the-ball",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:web && npm run build:server",
+    "test": "node --import tsx --test packages/game-core/src/*.test.ts",
+    "typecheck": "npm run typecheck:web && npm run typecheck:server",
+    "dev:next": "node scripts/dev.mjs",
+    "dev:server": "tsx watch apps/game-server/src/index.ts",
+    "dev:online": "node scripts/dev-online.mjs",
+    "typecheck:web": "tsc --noEmit -p apps/web",
+    "typecheck:server": "tsc --noEmit -p apps/game-server",
+    "build:web": "next build apps/web --webpack && node scripts/export.mjs",
+    "build:server": "node scripts/build-server.mjs",
+    "test:server": "node --import tsx --test apps/game-server/src/*.test.ts"
+  },
+  "dependencies": {
+    "@babylonjs/core": "^8.0.0",
+    "@colyseus/core": "0.17.56",
+    "@colyseus/schema": "4.0.31",
+    "@colyseus/sdk": "0.17.43",
+    "@colyseus/ws-transport": "0.17.13",
+    "express": "^5.3.0",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

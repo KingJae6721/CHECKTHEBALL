@@ -1,0 +1,108 @@
+import {MovementPrediction} from './movementPrediction';
+import {Client,type Room} from '@colyseus/sdk';
+import {NETWORK,type Action} from '../../../packages/protocol/src/index';
+import type {WorldSnapshot,ActorSnapshot} from '../../../packages/protocol/src/index';
+import {createState,type Input,type State} from '../../../packages/game-core/src/simulation';
+const mix=(a:number,b:number,t:number)=>a+(b-a)*t;
+const angle=(a:number,b:number,t:number)=>a+Math.atan2(Math.sin(b-a),Math.cos(b-a))*t;
+const vector=(a:{x:number;y:number;z:number},b:typeof a,t:number)=>({x:mix(a.x,b.x,t),y:mix(a.y,b.y,t),z:mix(a.z,b.z,t)});
+// Self: fixed-step prediction + authority replay. Remotes/ball: delayed snapshots.
+export class OnlineSession{
+ frames:WorldSnapshot[]=[];seq=0;connected=true;status='접속 완료';
+ readonly prediction=new MovementPrediction();moveSequence=0;droppedSnapshots=0;
+ private lastPump=0;private accumulator=0;private pendingJump=false;private barrier=0;private phaseOverride:{slow:boolean;seq:number}|undefined;
+ private clockOffset:number|undefined;private renderTime=-Infinity;private renderBase=-1;private renderFrame:WorldSnapshot|undefined;
+ private closed=false;
+ generated=0;cancelCounts:Record<string,number>={};trace:Record<string,unknown>[]=[];
+ private frameMs=0;private renderMs=0;private lastAck=0;private rateAt=0;private rateGenerated=0;private rateConsumed=0;private rateReceived=0;private rates={generatedPerSecond:0,receivedPerSecond:0,consumedPerSecond:0};
+ private record(kind:string,extra:Record<string,unknown>={}){
+  const now=performance.now(),a=this.latest?.players.find(p=>p.id===this.room.sessionId);
+  this.trace.push({at:Date.now(),clientMs:now,kind,tick:this.latest?.tick,ack:a?.processedMoveSeq,ackAdvance:(a?.processedMoveSeq??0)-this.lastAck,pending:this.prediction.pending.length,oldestPendingMs:this.prediction.pending.length?now-(this.prediction.pending[0].sentAt??now):0,generated:this.generated,rates:{...this.rates},frameMs:this.frameMs,renderMs:this.renderMs,correction:this.prediction.replayError,corrections:this.prediction.corrections,server:a?.net,serverTiming:this.latest?.serverTiming,...extra});
+  this.lastAck=a?.processedMoveSeq??this.lastAck;if(this.trace.length>600)this.trace.shift();
+ }
+ recordFrame(frameMs:number,renderMs:number){this.frameMs=frameMs;this.renderMs=renderMs;if(frameMs>=50)this.record('longFrame');}
+ exportDiagnostics(){return {exportedAt:new Date().toISOString(),cancelCounts:{...this.cancelCounts},trace:this.trace};}
+ constructor(readonly room:Room){
+  room.reconnection.enabled=false;room.onDrop(this.drop);room.onLeave(this.drop);room.onError(this.error);
+  room.onStateChange(this.receive);if(room.state?.frame)this.receive(room.state);
+ }
+ private drop=()=>{this.connected=false;if(!this.status.startsWith('통신 규약'))this.status='연결 끊김 · 새 참가로 다시 접속하세요';this.prediction.pending.length=0;this.prediction.clearOffset();};
+ private error=(_code:number,message?:string)=>{this.status=message??'연결 오류';};
+ get latest(){return this.frames.at(-1);}
+ get self(){return this.prediction.actor;}
+ get ownsBall(){return this.latest?.ownerId===this.room.sessionId;}
+ receive=(state:{frame:string})=>{
+  if(!state.frame||this.closed)return;const frame=JSON.parse(state.frame) as WorldSnapshot,last=this.latest;
+  if(frame.protocolVersion!==NETWORK.protocolVersion){this.connected=false;this.status=`통신 규약 불일치: 웹 v${NETWORK.protocolVersion} / 서버 ${frame.protocolVersion===undefined?'버전 없음(이전 서버)':'v'+frame.protocolVersion}. 같은 포트의 이전 게임 서버 또는 오래된 dist 실행 여부를 확인하세요.`;if(this.room.connection?.isOpen)void this.room.leave();return;}
+  if(last&&(frame.tick<=last.tick||frame.time<=last.time)){this.droppedSnapshots++;return;}
+  const now=performance.now(),offset=frame.time-now;
+  this.clockOffset=this.clockOffset===undefined||Math.abs(offset-this.clockOffset)>NETWORK.maxPredictionGapMs?offset:this.clockOffset+Math.max(-2,Math.min(2,offset-this.clockOffset))*.1;
+  this.frames.push(frame);if(this.frames.length>40)this.frames.shift();
+  const self=frame.players.find(a=>a.id===this.room.sessionId);if(!self)return;
+  this.moveSequence=Math.max(this.moveSequence,self.processedMoveSeq);
+  const waiting=this.barrier>0,finished=waiting&&self.processedActionSeq>=this.barrier;
+  if(finished){this.barrier=0;this.lastPump=0;this.accumulator=0;}
+  if(this.phaseOverride&&self.processedActionSeq>=this.phaseOverride.seq)this.phaseOverride=undefined;
+  this.prediction.accept(self,frame.players.find(a=>a.id!==self.id),waiting||!this.prediction.actor);const span=now-this.rateAt;if(!this.rateAt||span>=1000){if(this.rateAt)this.rates={generatedPerSecond:(this.generated-this.rateGenerated)*1000/span,receivedPerSecond:(self.net.received-this.rateReceived)*1000/span,consumedPerSecond:(self.net.consumed-this.rateConsumed)*1000/span};this.rateAt=now;this.rateGenerated=this.generated;this.rateConsumed=self.net.consumed;this.rateReceived=self.net.received;}this.record('snapshot');
+ };
+ private write(input:Input,actions:Action[],moveSeq?:number){
+  const seq=++this.seq;this.room.send('input',{seq,...(moveSeq===undefined?{}:{moveSeq}),x:input.x,z:input.z,sprint:input.sprint,yaw:Math.atan2(Math.sin(input.yaw),Math.cos(input.yaw)),pitch:input.pitch,actions});return seq;
+ }
+ send(input:Input,actions:Action[]=[],reason='EXPLICIT_CANCEL'){
+  if(!this.connected||this.closed)return;
+  const other=actions.filter(a=>a!=='jump');if(actions.includes('jump'))this.pendingJump=true;if(!other.length)return;
+  const seq=this.write(input,other);
+  if(other.includes('shotDown')&&this.ownsBall)this.phaseOverride={slow:true,seq};
+  if(other.includes('cancel')||other.includes('movementSync')){const cancel=other.includes('cancel');this.cancelCounts[reason]=(this.cancelCounts[reason]??0)+1;this.record(cancel?'cancel':'movementSync',{reason,seq});this.barrier=seq;this.pendingJump=false;if(cancel)this.phaseOverride={slow:false,seq};this.prediction.pending.length=0;this.prediction.clearOffset();this.accumulator=0;this.lastPump=0;this.prediction.writer='client:cancel-barrier';}
+ }
+ advance(now:number,input:Input){
+  if(!this.connected||!this.self||this.closed)return;
+  if(!this.lastPump){this.lastPump=now;return;}const elapsed=now-this.lastPump;this.lastPump=now;
+  if(this.barrier){this.accumulator=0;return;}
+  const step=1000/NETWORK.tickRate;
+  if(elapsed>NETWORK.maxPredictionGapMs||this.prediction.pending.length>=NETWORK.maxPendingInputs){this.send({...input,x:0,z:0,sprint:false},['movementSync'],elapsed>NETWORK.maxPredictionGapMs?'PUMP_GAP':'PENDING_LIMIT');this.prediction.writer='client:movement-resync';return;}
+  this.accumulator+=elapsed;
+  if(this.accumulator>step*(NETWORK.maxPredictionSteps+1)){this.send({...input,x:0,z:0,sprint:false},['movementSync'],'CATCH_UP_LIMIT');this.prediction.writer='client:movement-resync';return;}
+  let steps=0;while(this.accumulator>=step&&steps++<NETWORK.maxPredictionSteps&&this.prediction.pending.length<NETWORK.maxPendingInputs){
+   const jump=this.pendingJump;this.pendingJump=false;
+   const moveSeq=++this.moveSequence,seq=this.write(input,jump?['jump']:[],moveSeq);
+   const slow=this.ownsBall&&(this.phaseOverride?.slow??this.self.phase==='CHARGING');
+   this.generated++;this.prediction.push({seq,moveSeq,sentAt:now,input:{...input},jump,phase:slow?'CHARGING':'HELD',phaseSeq:this.phaseOverride?.seq??-1});
+   this.accumulator-=step;
+  }
+ }
+ sample(now:number){
+  const last=this.latest;if(!last)return;
+  const target=Math.min(last.time,now+(this.clockOffset??last.time-now)-NETWORK.interpolationMs);
+  this.renderTime=Math.max(this.renderTime,target);let a=this.frames[0],b=last;
+  for(const f of this.frames){if(f.time<=this.renderTime)a=f;if(f.time>=this.renderTime){b=f;break;}}
+  if(a===b||b.time===a.time)return b;
+  const t=Math.max(0,Math.min(1,(this.renderTime-a.time)/(b.time-a.time)));
+  // Clone only when the source snapshot changes, not every render frame.
+  if(this.renderBase!==a.tick){this.renderFrame=structuredClone(a);this.renderBase=a.tick;}
+  const out=this.renderFrame!;out.time=mix(a.time,b.time,t);out.tick=mix(a.tick,b.tick,t);
+  for(const p of out.players){
+   const source=a.players.find(x=>x.id===p.id)!,q=b.players.find(x=>x.id===p.id);if(!q||p.id===this.room.sessionId)continue;
+   p.position.x=mix(source.position.x,q.position.x,t);p.position.y=mix(source.position.y,q.position.y,t);p.position.z=mix(source.position.z,q.position.z,t);
+   p.vy=mix(source.vy,q.vy,t);p.input.yaw=angle(source.input.yaw,q.input.yaw,t);p.input.pitch=mix(source.input.pitch,q.input.pitch,t);
+   if(source.motion.action===q.motion.action){p.motion.elapsed=mix(source.motion.elapsed,q.motion.elapsed,t);p.motion.clock=mix(source.motion.clock,q.motion.clock,t);const d=((q.motion.phase-source.motion.phase+1.5)%1)-.5;p.motion.phase=(source.motion.phase+d*t+1)%1;p.motion.dribbleYaw=angle(source.motion.dribbleYaw,q.motion.dribbleYaw,t);if(p.motion.crossover&&source.motion.crossover&&q.motion.crossover&&source.motion.crossover.from===q.motion.crossover.from)p.motion.crossover.elapsed=mix(source.motion.crossover.elapsed,q.motion.crossover.elapsed,t);}
+   if(source.defense.kind===q.defense.kind)p.defense.elapsed=mix(source.defense.elapsed,q.defense.elapsed,t);
+   p.locomotion.phase=angle(source.locomotion.phase,q.locomotion.phase,t);p.locomotion.blend=mix(source.locomotion.blend,q.locomotion.blend,t);p.locomotion.run=mix(source.locomotion.run,q.locomotion.run,t);
+  }
+  if(a.revision===b.revision&&a.ownerId===b.ownerId&&a.flightKind===b.flightKind){out.ball.x=mix(a.ball.x,b.ball.x,t);out.ball.y=mix(a.ball.y,b.ball.y,t);out.ball.z=mix(a.ball.z,b.ball.z,t);}
+  return out;
+ }
+ diagnostics(){
+  const p=this.prediction,a=p.actor,server=this.latest?.players.find(x=>x.id===this.room.sessionId);
+  const point=(v:{x:number;y:number;z:number}|undefined)=>v?`${v.x.toFixed(2)},${v.y.toFixed(2)},${v.z.toFixed(2)}`:'-';
+  return `RATE generated ${this.rates.generatedPerSecond.toFixed(1)}/s received ${this.rates.receivedPerSecond.toFixed(1)}/s consumed ${this.rates.consumedPerSecond.toFixed(1)}/s\nCANCEL/SYNC ${JSON.stringify(this.cancelCounts)}\nSERVER queue ${server?.net.queueLength??0} age ${server?.net.oldestAgeMs.toFixed(0)??0}ms consumed ${server?.net.consumed??0} discarded ${server?.net.discarded??0} timeouts ${server?.net.timeouts??0}\nTICK CPU ${this.latest?.serverTiming?.tickMs.toFixed(2)??'-'}ms max ${this.latest?.serverTiming?.maxTickMs.toFixed(2)??'-'}ms\nNET tick ${this.latest?.tick??'-'} · processedInput ${a?.processedInputSeq??'-'} · processedMove ${a?.processedMoveSeq??'-'}\nPENDING ${p.pending.length} · receiveSeq ${a?.ack??'-'} · staleDrops ${this.droppedSnapshots}\nERROR server ${p.serverError.toFixed(3)}m · afterReplay ${p.replayError.toFixed(3)}m\nCORRECTIONS ${p.corrections} · last ${p.lastCorrection.toFixed(3)}m · resets ${p.resets}\nPRED ${point(p.position)} / AUTH ${point(server?.position)}\nSERVER LOOK ${server?.input.yaw.toFixed(3)??'-'},${server?.input.pitch.toFixed(3)??'-'}\nVISUAL ${Math.hypot(p.offset.x,p.offset.y,p.offset.z).toFixed(3)}m\nWRITE ${p.writer}\nSERVER ${a?.lastPositionWriter??'-'} · overlapRecoveries ${a?.recoveryCount??0}`;
+ }
+ resetDiagnostics(){this.prediction.corrections=0;this.prediction.lastCorrection=0;this.prediction.resets=0;this.droppedSnapshots=0;}
+ close(){if(this.closed)return;this.closed=true;this.connected=false;this.room.onStateChange.remove(this.receive);this.room.onDrop.remove(this.drop);this.room.onLeave.remove(this.drop);this.room.onError.remove(this.error);this.prediction.pending.length=0;if(this.room.connection?.isOpen)void this.room.leave();}
+}
+export async function connectOnline(roomId?:string,nickname?:string){const address=process.env.NEXT_PUBLIC_GAME_SERVER_URL;if(!address)throw Error('NEXT_PUBLIC_GAME_SERVER_URL을 설정하고 웹 서버를 다시 시작하세요.');if(!/^wss?:\/\//.test(address))throw Error('게임 서버 주소는 ws:// 또는 wss://로 설정하세요.');
+ const client=new Client(address);const room=roomId?await client.joinById(roomId.trim(),{nickname}):await client.create('basketball',{nickname});return new OnlineSession(room);
+}
+export function actorView(frame:WorldSnapshot,actor:ActorSnapshot,s:State=createState()):State{
+ s.networked=true;s.player=actor.position;s.vy=actor.vy;s.playerMotion=actor.motion;s.defense=actor.defense;s.locomotion=actor.locomotion;s.owner=frame.ownerId===actor.id?'player':frame.ownerId?'dummy':'none';s.phase=s.owner==='player'?actor.phase:frame.flightKind?'IN_FLIGHT':'RESOLVING';s.charge=actor.charge;s.passCharge=actor.passCharge;s.ball=frame.ball;s.ballVelocity=frame.velocity;s.flightKind=frame.flightKind;s.score=frame.score;s.attempts=frame.attempts;s.made=frame.made;s.resolved=frame.resolved;s.shotId=frame.shotId;s.message=frame.message;s.tick=frame.tick;return s;
+}

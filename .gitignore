@@ -1,0 +1,15 @@
+node_modules/
+apps/web/.next/
+apps/web/out/
+out/
+*.tsbuildinfo
+apps/game-server/dist/
+apps/web/.env.local
+
+# Third-party recordings: playable end-product assets, excluded from source distribution.
+/sounds/basketball-ball-drible-2093.wav
+/sounds/basketball-ball-bouncing.wav
+/apps/web/public/assets/audio/dribble.wav
+/apps/web/public/assets/audio/bounce.wav
+/sounds/freesound_community-basketball-backboard-83558.mp3
+/apps/web/public/assets/audio/board.mp3
