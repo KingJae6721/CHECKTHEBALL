@@ -4,7 +4,7 @@ export const AUDIO={defaultVolume:.65,voices:12,headroom:.45,referenceDistance:2
  effects:{
   dribble:{file:'dribble.wav',gain:.75,interval:160},floor:{file:'bounce.wav',gain:.75,interval:65},
   step:{file:'step.wav',gain:.45,interval:150},rim:{file:'rim.wav',gain:.65,interval:65},
-  board:{file:'board.mp3',gain:.65,interval:65},net:{file:'net.wav',gain:.5,interval:100},
+  board:{file:'board.wav',gain:.65,interval:65},net:{file:'net.wav',gain:.5,interval:100},
   jump:{file:'jump.wav',gain:.35,interval:200},land:{file:'land.wav',gain:.5,interval:200},
   blockJump:{file:'block-jump.wav',gain:.4,interval:200},blockHit:{file:'block-hit.wav',gain:.7,interval:100},
  }} as const;

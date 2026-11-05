@@ -20,23 +20,33 @@ https://mixkit.co/free-sound-effects/basketball/
   peak normalized to 0.8, 5ms tail fade. Originals are preserved.
 - Playback may vary pitch by ±2%. There is no external hotlink.
 
-## User-supplied Pixabay recording (1)
+## Freesound backboard recording — CC0
 
-- `sounds/freesound_community-basketball-backboard-83558.mp3` → deployed `board.mp3`.
-- Title: **Basketball backboard**. Creator listed by the user: **freesound_community**.
-- Source supplied by the user: https://pixabay.com/sound-effects/film-special-effects-basketball-backboard-83558/
-- Creator: https://pixabay.com/users/freesound_community-46691455/
-- Pixabay Content License: https://pixabay.com/service/license-summary/
-- Added at the user's explicit request. The current item/terms were not independently browsed,
-  per the user's instruction. No CC0 claim is made. Preserve applicable Pixabay terms;
-  do not distribute this file as standalone stock. Excluded from Git source distribution.
-- Processing: byte-for-byte copy as MP3; gameplay playback gain/distance attenuation and ±2% pitch variation.
+- Title: **Basketball backboard.wav**, by **PerMagnusLindborg**.
+- Source: https://freesound.org/people/PerMagnusLindborg/sounds/324247/
+- License: **CC0 1.0** — https://creativecommons.org/publicdomain/zero/1.0/
+- `sounds/basketball_backboard.wav` → deployed `board.wav` (byte-for-byte copy).
+- Runtime playback applies volume/distance attenuation and ±2% pitch variation.
+- Replaces the previously used Pixabay MP3. The CC0 source and deployed WAV can be included in Git.
 
-## Synthetic temporary effects (7)
+## Freesound net recording — CC BY 4.0
 
-`step.wav`, `rim.wav`, `net.wav`, `jump.wav`, `land.wav`,
+- Title: **SPRTCourt-Samsung Galaxy Smartphone, CU_Basketball, Swish Into Net_Nicholas Judy_TDC**.
+- Credit: **designerschoice / Nicholas Judy**, via Freesound.
+- Author: https://freesound.org/people/designerschoice/
+- Source: https://freesound.org/people/designerschoice/sounds/847042/
+- License: **Creative Commons Attribution 4.0 International (CC BY 4.0)**:
+  https://creativecommons.org/licenses/by/4.0/
+- `sounds/basketball_netsound.wav` → deployed `net.wav` (byte-for-byte copy).
+- Modifications: renamed for deployment; runtime volume/distance attenuation and ±2% pitch variation.
+- Source and deployed WAV may be shared under CC BY 4.0; preserve this attribution/license notice.
+- Used only for confirmed baskets, not passes. The same recording currently serves clean and contact baskets.
+
+## Synthetic temporary effects (6)
+
+`step.wav`, `rim.wav`, `jump.wav`, `land.wav`,
 `block-jump.wav`, `block-hit.wav`: generated for this project by
 `scripts/prepare-audio.py` from deterministic oscillators/noise/envelopes.
 These contain no external samples and are project-generated assets, not real basketball recordings.
-No voice/grunt samples are included. The same temporary net sample is used for clean and contact baskets;
-the event carries contact history so a future licensed replacement can distinguish them.
+No voice/grunt samples are included. Backboard and net effects are actual recordings listed above.
+

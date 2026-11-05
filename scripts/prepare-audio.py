@@ -14,6 +14,9 @@ def save(name, samples):
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate); w.writeframes(pcm.tobytes())
 
 for original, target in [('basketball-ball-drible-2093.wav','dribble.wav'), ('basketball-ball-bouncing.wav','bounce.wav')]:
+    if not (root / 'sounds' / original).exists():
+        print('Optional Mixkit source missing; existing asset preserved:', original)
+        continue
     with wave.open(str(root / 'sounds' / original), 'rb') as w:
         assert w.getsampwidth() == 3 and w.getframerate() == rate
         channels=w.getnchannels(); raw=w.readframes(w.getnframes())
@@ -25,13 +28,19 @@ for original, target in [('basketball-ball-drible-2093.wav','dribble.wav'), ('ba
     for i in range(min(int(rate*.005),len(samples))): samples[-1-i]*=i/(rate*.005)
     save(target,samples)
 
-shutil.copyfile(root / 'sounds/freesound_community-basketball-backboard-83558.mp3',out / 'board.mp3')
+for original, target in [('basketball_backboard.wav','board.wav'), ('basketball_netsound.wav','net.wav')]:
+    source = root / 'sounds' / original
+    if source.exists():
+        shutil.copyfile(source, out / target)
+    elif not (out / target).exists():
+        raise FileNotFoundError('Missing licensed source: ' + str(source))
 
 # Original procedural placeholders, NOT recordings of basketball equipment/shoes.
-specs={'step':(.10,90,32,.3),'rim':(.30,620,13,.14),
-       'net':(.23,0,10,1),'jump':(.13,0,18,1),'land':(.15,75,25,.35),
+specs={'step':(.10,90,32,.3),'rim':(.30,620,13,.14),'jump':(.13,0,18,1),'land':(.15,75,25,.35),
        'block-jump':(.16,0,16,1),'block-hit':(.12,130,25,.6)}
 for seed,(name,(seconds,freq,decay,noise)) in enumerate(specs.items()):
+    if (out / (name+'.wav')).exists():
+        continue
     rng=random.Random(seed);samples=[];filtered=0
     for i in range(int(seconds*rate)):
         t=i/rate;filtered=.72*filtered+.28*rng.uniform(-1,1)
@@ -40,4 +49,4 @@ for seed,(name,(seconds,freq,decay,noise)) in enumerate(specs.items()):
         samples.append(attack*math.exp(-decay*t)*((1-noise)*tone+noise*filtered))
     for i in range(int(rate*.006)):samples[-1-i]*=i/(rate*.006)
     save(name+'.wav',samples)
-print('Prepared 2 Mixkit-derived WAVs, 1 user-supplied Pixabay MP3 and 7 synthetic WAVs.')
+print('Prepared backboard/net recordings and other existing assets.')

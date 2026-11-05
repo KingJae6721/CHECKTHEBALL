@@ -723,3 +723,23 @@ freesound_community의 Basketball backboard MP3 1개다. 원본 sounds 파일은
   `apps/game-server/src/stage-c.test.ts`, `stage-d.test.ts`, `scripts/verify-online-browser.cjs`.
 - 자산/문서: `scripts/prepare-audio.py`, `apps/web/public/assets/audio/`의 효과음 10개와
   `ATTRIBUTIONS.md`, `.gitignore`, `README.md`. 기존 사용자 sounds 원본·모델링 수정은 보존했다.
+
+### Freesound 백보드·네트 녹음 교체
+
+현재 백보드는 `sounds/basketball_backboard.wav` → `public/assets/audio/board.wav`
+(PerMagnusLindborg, CC0), 네트는 `sounds/basketball_netsound.wav` →
+`public/assets/audio/net.wav` (designerschoice / Nicholas Judy, CC BY 4.0)를 사용한다.
+원본을 변경 없이 복사한다. 기존 백보드 충돌 사건과 서버 확정 득점 사건에 연결하며,
+패스는 네트음을 발생시키지 않는다. 클린/접촉 후 득점에 같은 네트 녹음을 사용한다.
+Esc 오디오 메뉴에서 네트 제작자·라이선스와 전체 출처 문서를 확인할 수 있다.
+
+이 두 원본·정적 복사본은 Git에서 제외하지 않으므로 함께 커밋하면 GitHub → Vercel
+배포에 포함된다. Mixkit 드리블/바운드의 기존 제외 정책은 별개로 유지한다.
+음원 준비 스크립트는 Mixkit 원본이 없으면 기존 배포 자산을 보존하며 계속 실행한다.
+이제 실제 녹음은 드리블·바운드·백보드·네트 4종이고 합성 임시음은 나머지 6종이다.
+
+이번 연결에서는 원본과 배포 파일 바이트 일치 및 WAV 형식을 확인했다.
+테스트·타입 검사·빌드와 실제 청취는 실행하지 않았다. 새로고침 후 플레이를 눌러
+백보드에 맞는 슛에서 새 타격음, 득점에서 새 네트음이 나는지 확인한다.
+패스·실패 슛에서는 네트음이 없어야 하며, Esc 메뉴에서 출처 링크도 확인한다.
+
