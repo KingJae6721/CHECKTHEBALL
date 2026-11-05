@@ -34,7 +34,7 @@ export const DUMMY = {
   catchY: 1.28, catchForward: .38, markerRadius: .6, markerThickness: .025, labelY: 2.12, labelWidth: 1.5, labelHeight: .28,
 };
 export const PRACTICE = {
-  releaseLock: .45, catchRadius: .42, catchHeightTolerance: .36, catchSpeed: 28,
+  releaseLock: .45, catchSpeed: 28,
   playerCatchY: 1.28, aimAngle: .20, targetHintRange: 18,
   dummyReturnSpeed: 8,
   dummyHoldSeconds: .7, passFlightSeconds: 4,
@@ -44,8 +44,11 @@ export const PRACTICE = {
 // Ball-centre acquisition volumes; initial gameplay tuning, not measured limits.
 // Ground height is world floor-relative; air height follows the player's feet.
 export const ACQUISITION = {
-  ground: { halfWidth: .8, minForward: -.25, maxForward: .85, minHeight: 0, maxHeight: .5, maxPlayerHeight: .12, maxSpeed: 14 },
-  air: { halfWidth: .6, minForward: .08, maxForward: 1.25, minHeight: .5, maxHeight: 1.75, maxSpeed: 18, anchorForward: .6, anchorHeight: 1.2 },
+  ground: { halfWidth: .9, minForward: -.25, maxForward: 1.1, minHeight: 0, maxHeight: .5, maxPlayerHeight: .12, maxSpeed: 18 },
+  air: { halfWidth: .75, minForward: .18, maxForward: 1.4, minHeight: .3, maxHeight: 2.05, maxSpeed: 26, anchorForward: .6, anchorHeight: 1.2 },
+  // Bounded forward reach for a moving receiver chasing an outgoing ball.
+  // Gameplay allowance, not a rollback or an estimate of an individual client's RTT.
+  chase: { displayDelaySeconds: .1, maxExtraForward: .6, minForwardSpeed: .5 },
 };
 
 export const PLAYER = { eyeHeight: 1.7 };

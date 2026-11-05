@@ -73,7 +73,7 @@ test('swept catch works when both path endpoints lie outside receiver volume',()
 test('catch rejects height, speed, wrong flight kind, ownership and distant passes',()=>{
  for(const kind of ['height','speed','shot','owned','distance']) {
   const s=loose();s.phase='IN_FLIGHT';s.flightKind='pass';s.passFrom='player';const t=dummyCatchPosition(s);let a={...t};
-  if(kind==='height')a.y+=PRACTICE.catchHeightTolerance+.1;
+  if(kind==='height')a.y=DUMMY.position.y+ACQUISITION.air.maxHeight+COURT.ballRadius+.1;
   if(kind==='speed')s.ballVelocity.x=PRACTICE.catchSpeed+1;
   if(kind==='shot')s.flightKind='shot';
   if(kind==='owned')s.owner='player';

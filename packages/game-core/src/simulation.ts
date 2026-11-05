@@ -6,7 +6,7 @@ import {createDefense, advanceDefense, finishDefense, trySteal, tryBlock, type D
 import {createPractice, stepPractice, configurePractice, type PracticeState} from './practice';
 import { createMotion, cancelCrossover, beginGather, beginCatch, cancelMotion, queueRelease, markReleased, advanceControlledMotion, controlledPosition, updateUnownedMotion, dribblePoint, releaseSocket, type BallMotion, type ReleaseIntent } from './motion';
 import { playerPassLaunch, passDirection, type PlayerPassLaunch } from './pass';
-import { evaluateAcquisition, outsideAcquisitionVolumes, acquisitionEligibility, type AcquisitionEvent, type AcquisitionBlock } from './acquisition';
+import { evaluateAcquisition, outsideAcquisitionVolumes, acquisitionEligibility, passCatchPoint, type AcquisitionEvent, type AcquisitionBlock } from './acquisition';
 import { COURT, PHYSICS, DUMMY, PRACTICE, PASS, PLAYER, DRIBBLE, MOVEMENT } from './court';
 import { advanceBall, isBallPathClear } from './physics';
 export type Vec = { x: number; y: number; z: number };
@@ -83,7 +83,7 @@ export function stepGame(s: State, input: Input, dt = CFG.dt) {
       } else if(s.flightKind === 'pass') {
         if(floor) makeLoose(s);
         // Collision correction is not a catch path: do not catch through a solid.
-        else if(!collided && catchPass(s,prev,next)) return false;
+        else if(!collided && catchPass(s,prev,next,input)) return false;
       }
       // Never treat a penetration-correction displacement as a swept catch path.
       if(s.flightKind!=='pass' && tryAcquireBall(s,input,collided?next:prev,next))return false;
@@ -170,19 +170,16 @@ function returnPass(s: State) {
   beginPass(s,'dummy',start,{x:dx/t,y:(target.y-start.y)/t+.5*CFG.gravity*t,z:dz/t});
   s.message='반환 패스 · 공을 받아보세요';
 }
-// Segment-vs-spherical catch volume; no endpoint-only tunnelling.
-export function catchPass(s: State,a: Vec,b: Vec) {
+// Swept feet/front reach, shared with online receivers. No endpoint-only tunnelling.
+export function catchPass(s: State,a: Vec,b: Vec,input:Input=zeroInput()) {
   if(s.defense.pickupLock>0||s.owner!=='none'||s.flightKind!=='pass'||Math.hypot(s.ballVelocity.x,s.ballVelocity.y,s.ballVelocity.z)>PRACTICE.catchSpeed) return false;
   for(const owner of ['dummy','player'] as const) {
     if(s.passFrom===owner&&s.releaseAge<PRACTICE.releaseLock) continue;
     // The stationary dummy only receives a player pass, never hoovers up loose balls.
     if(owner==='dummy'&&s.passFrom!=='player') continue;
-    const target=owner==='dummy'?dummyCatchPosition(s):playerCatchPosition(s);
-    const dx=b.x-a.x,dy=b.y-a.y,dz=b.z-a.z,den=dx*dx+dy*dy+dz*dz;
-    const t=den>0?Math.max(0,Math.min(1,((target.x-a.x)*dx+(target.y-a.y)*dy+(target.z-a.z)*dz)/den)):0;
-    const p={x:a.x+dx*t,y:a.y+dy*t,z:a.z+dz*t};
-    if(Math.abs(p.y-target.y)>PRACTICE.catchHeightTolerance || Math.hypot(p.x-target.x,p.y-target.y,p.z-target.z)>PRACTICE.catchRadius) continue;
-    if(!isBallPathClear(p,target)) continue;
+    const receiverInput=owner==='dummy'?{...input,yaw:dummyYaw(s)}:input;
+    const p=passCatchPoint(s,receiverInput,a,b,owner==='dummy'?DUMMY.position:s.player);
+    if(!p)continue;
     giveBall(s,owner,p);s.message=owner==='dummy'?'더미 캐치 · 반환 준비':'캐치 · 우클로 다시 패스';return true;
   }
   return false;

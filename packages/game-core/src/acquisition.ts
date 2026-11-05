@@ -5,12 +5,16 @@ export type AcquisitionReason = 'GROUND_PICKUP' | 'AIR_CATCH' | 'OUT_OF_BOUNDS' 
 export type AcquisitionBlock = 'NONE' | 'OWNED_BY_PLAYER' | 'OWNED_BY_DUMMY' | 'PASS_IN_FLIGHT' | 'RELEASE_LOCK' | 'UNSUPPORTED_SHOT' | 'AIRBALL_NOT_LEFT' | 'AIRBALL_RISING' | 'OUTSIDE_VOLUMES' | 'TOO_FAST' | 'OBSTRUCTED';
 export type AcquisitionEvent = { reason: AcquisitionReason; tick: number; flightSeconds: number; looseSeconds: number; position: Vec };
 export type AcquisitionVolume = { reason: 'GROUND_PICKUP'|'AIR_CATCH'; center: Vec; size: Vec; yaw: number; active: boolean; maxSpeed: number };
-export function acquisitionVolumes(s: State,input: Input): AcquisitionVolume[] {
+export function acquisitionVolumes(s: State,input: Input,position=s.player): AcquisitionVolume[] {
+  const forwardBall=s.ballVelocity.x*Math.sin(input.yaw)+s.ballVelocity.z*Math.cos(input.yaw);
+  const forwardPlayer=s.locomotion.velocity.x*Math.sin(input.yaw)+s.locomotion.velocity.z*Math.cos(input.yaw);
+  const chase=s.networked&&position===s.player&&forwardPlayer>ACQUISITION.chase.minForwardSpeed&&forwardBall>0
+    ?Math.min(ACQUISITION.chase.maxExtraForward,forwardBall*ACQUISITION.chase.displayDelaySeconds):0;
   const make=(reason: 'GROUND_PICKUP'|'AIR_CATCH',c: typeof ACQUISITION.air | typeof ACQUISITION.ground,base: number,active: boolean): AcquisitionVolume=>{
-    const z=(c.minForward+c.maxForward)/2;
-    return {reason,center:{x:s.player.x+Math.sin(input.yaw)*z,y:base+(c.minHeight+c.maxHeight)/2,z:s.player.z+Math.cos(input.yaw)*z},size:{x:c.halfWidth*2,y:c.maxHeight-c.minHeight,z:c.maxForward-c.minForward},yaw:input.yaw,active,maxSpeed:c.maxSpeed};
+    const maxForward=c.maxForward+chase,z=(c.minForward+maxForward)/2;
+    return {reason,center:{x:position.x+Math.sin(input.yaw)*z,y:base+(c.minHeight+c.maxHeight)/2,z:position.z+Math.cos(input.yaw)*z},size:{x:c.halfWidth*2,y:c.maxHeight-c.minHeight,z:maxForward-c.minForward},yaw:input.yaw,active,maxSpeed:c.maxSpeed};
   };
-  return [make('GROUND_PICKUP',ACQUISITION.ground,COURT.floorY,s.player.y<=ACQUISITION.ground.maxPlayerHeight),make('AIR_CATCH',ACQUISITION.air,s.player.y,true)];
+  return [make('GROUND_PICKUP',ACQUISITION.ground,COURT.floorY,position.y<=ACQUISITION.ground.maxPlayerHeight),make('AIR_CATCH',ACQUISITION.air,position.y,true)];
 }
 function local(p: Vec,v: AcquisitionVolume): Vec {
   const x=p.x-v.center.x,z=p.z-v.center.z;
@@ -47,14 +51,23 @@ export function acquisitionEligibility(s: State): AcquisitionBlock {
 }
 export function evaluateAcquisition(s: State,input: Input,a=s.ball,b=s.ball,groundOnly=false): { reason: 'GROUND_PICKUP'|'AIR_CATCH'|null; block: AcquisitionBlock; point:Vec|null } {
   const eligibility=acquisitionEligibility(s);if(eligibility!=='NONE')return {reason:null,block:eligibility,point:null};
+  return evaluateReach(s,input,a,b,groundOnly);
+}
+// Pass eligibility remains separate from shot/rebound eligibility. Both use the
+// same feet/front reach and obstruction checks, instead of a small torso sphere.
+export function passCatchPoint(s:State,input:Input,a:Vec,b:Vec,position=s.player):Vec|null {
+  if(s.owner!=='none'||s.flightKind!=='pass'||s.defense.pickupLock>0)return null;
+  return evaluateReach(s,input,a,b,false,position,true).point;
+}
+function evaluateReach(s:State,input:Input,a:Vec,b:Vec,groundOnly=false,position=s.player,pass=false): { reason: 'GROUND_PICKUP'|'AIR_CATCH'|null; block: AcquisitionBlock; point:Vec|null } {
   let block: AcquisitionBlock='OUTSIDE_VOLUMES';
-  for(const v of acquisitionVolumes(s,input)) {
+  for(const v of acquisitionVolumes(s,input,position)) {
     if(!v.active||(groundOnly&&v.reason!=='GROUND_PICKUP'))continue;
-    const t=entry(a,b,v);if(t===null)continue;
-    if(Math.hypot(s.ballVelocity.x,s.ballVelocity.y,s.ballVelocity.z)>v.maxSpeed){block='TOO_FAST';continue;}
+    const t=entry(a,b,v,COURT.ballRadius);if(t===null)continue;
+    if(Math.hypot(s.ballVelocity.x,s.ballVelocity.y,s.ballVelocity.z)>(pass?PRACTICE.catchSpeed:v.maxSpeed)){block='TOO_FAST';continue;}
     const p={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:a.z+(b.z-a.z)*t};
-    const anchor=v.reason==='GROUND_PICKUP'?{x:s.player.x,y:p.y,z:s.player.z}:{x:s.player.x+Math.sin(input.yaw)*ACQUISITION.air.anchorForward,y:s.player.y+ACQUISITION.air.anchorHeight,z:s.player.z+Math.cos(input.yaw)*ACQUISITION.air.anchorForward};
-    if(!isBallPathClear(a,p)||!isBallPathClear(p,anchor)||!isBallPathClear(anchor,{x:s.player.x,y:anchor.y,z:s.player.z})){block='OBSTRUCTED';continue;}
+    const anchor=v.reason==='GROUND_PICKUP'?{x:position.x,y:p.y,z:position.z}:{x:position.x+Math.sin(input.yaw)*ACQUISITION.air.anchorForward,y:position.y+ACQUISITION.air.anchorHeight,z:position.z+Math.cos(input.yaw)*ACQUISITION.air.anchorForward};
+    if(!isBallPathClear(a,p)||!isBallPathClear(p,anchor)||!isBallPathClear(anchor,{x:position.x,y:anchor.y,z:position.z})){block='OBSTRUCTED';continue;}
     return {reason:v.reason,block:'NONE',point:p};
   }
   return {reason:null,block,point:null};

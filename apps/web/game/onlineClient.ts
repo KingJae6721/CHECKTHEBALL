@@ -15,12 +15,19 @@ export class OnlineSession{
  private clockOffset:number|undefined;private renderTime=-Infinity;private renderBase=-1;private renderFrame:WorldSnapshot|undefined;
  private closed=false;
  private snapshotGaps=new Samples(200);private rtts=new Samples(32);private jitter=new Samples(32);private lastReceiveAt=0;private lastRtt:number|undefined;
- private pingSequence=0;private nextPingAt=0;private pings=new Map<number,number>();private removePong:(()=>void)|undefined;
+ private pingSequence=0;private nextPingAt=0;private lastPongAt=0;private pings=new Map<number,number>();private removePong:(()=>void)|undefined;
  private underflow=false;underflowCount=0;underflowFrames=0;bufferAheadMs=0;pingTimeouts=0;
- private pong=(value:{id:number})=>{if(!value||!Number.isSafeInteger(value.id))return;const sent=this.pings.get(value.id);if(sent===undefined)return;this.pings.delete(value.id);const rtt=performance.now()-sent;this.rtts.add(rtt);if(this.lastRtt!==undefined)this.jitter.add(Math.abs(rtt-this.lastRtt));this.lastRtt=rtt;this.record('pong',{rtt});};
+ private pong=(value:{id:number})=>{if(!value||!Number.isSafeInteger(value.id))return;const sent=this.pings.get(value.id);if(sent===undefined)return;this.pings.delete(value.id);this.lastPongAt=performance.now();const rtt=this.lastPongAt-sent;this.rtts.add(rtt);if(this.lastRtt!==undefined)this.jitter.add(Math.abs(rtt-this.lastRtt));this.lastRtt=rtt;this.record('pong',{rtt});};
  private ping(now:number){if(!this.latest?.serverTiming?.supportsPing||typeof document!=='undefined'&&document.hidden)return;
   for(const [id,sent] of this.pings)if(now-sent>5000){this.pings.delete(id);this.pingTimeouts++;}
   if(now<this.nextPingAt||this.pings.size>=2)return;const id=++this.pingSequence;this.nextPingAt=now+1000;this.pings.set(id,now);this.room.send('diagnosticPing',{id});
+ }
+ pingDisplay(){
+  if(!this.connected)return {ms:null,label:'연결 끊김'};
+  if(!this.latest?.serverTiming?.supportsPing)return {ms:null,label:'핑 측정을 지원하는 게임 서버 업데이트 필요'};
+  if(this.lastRtt===undefined)return {ms:null,label:'핑 측정 중'};
+  if(performance.now()-this.lastPongAt>5000)return {ms:null,label:'핑 응답 지연'};
+  return {ms:Math.round(this.lastRtt),label:'게임 서버 왕복 지연'};
  }
  metrics(){return {rttMs:this.rtts.summary(),rttVariationMs:this.jitter.summary(),pingSupported:!!this.latest?.serverTiming?.supportsPing,pingTimeouts:this.pingTimeouts,snapshotGapMs:this.snapshotGaps.summary(),interpolationUnderflows:this.underflowCount,underflowFrames:this.underflowFrames,bufferAheadMs:this.bufferAheadMs,corrections:this.prediction.corrections,lastCorrectionM:this.prediction.lastCorrection,totalCorrectionM:this.prediction.totalCorrection,maxCorrectionM:this.prediction.maxCorrection,serverTiming:this.latest?.serverTiming};}
  generated=0;cancelCounts:Record<string,number>={};trace:Record<string,unknown>[]=[];

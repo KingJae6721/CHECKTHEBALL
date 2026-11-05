@@ -6,8 +6,8 @@ import {createMotion,advanceControlledMotion,controlledPosition,updateUnownedMot
 import {createDefense,startDefense,cancelDefense,advanceDefense,finishDefense,trySteal,tryBlock,type DefenseState} from './defense';
 import {createLocomotion,advanceLocomotion,type Locomotion} from './locomotion';
 import {createState,zeroInput,CFG,startCharge,startPassCharge,releaseShot,releasePass,cancelAllCharges,firePendingPlayer,giveBall,makeLoose,resolve,rimCrossing,type State,type Input,type Vec,type Phase} from './simulation';
-import {advanceBall,isBallPathClear} from './physics';
-import {evaluateAcquisition,outsideAcquisitionVolumes} from './acquisition';
+import {advanceBall} from './physics';
+import {evaluateAcquisition,outsideAcquisitionVolumes,passCatchPoint} from './acquisition';
 import {NETWORK,validInput,type Action} from '../../protocol/src/index';
 export type OnlineActor={nickname?:string;processedInputSeq:number;processedMoveSeq:number;processedActionSeq:number;receivedMoveSeq:number;sequencedMovement:boolean;moves:{seq:number;moveSeq:number;input:Input;jump:boolean;at:number}[];net:{received:number;consumed:number;discarded:number;queueLength:number;oldestAgeMs:number;timeouts:number;lastCancel:string;lastCancelAt:number;lastReceiveAt:number};recoveryCount:number;lastPositionWriter:string;id:string;slot:number;position:Vec;vy:number;input:Input;motion:BallMotion;defense:DefenseState;locomotion:Locomotion;phase:Phase;charge:number;passCharge:number;ack:number;receivedAt:number;rateAt:number;rateCount:number;queue:{action:Action;input:Input;seq:number}[];buttons:Set<string>;score:number;attempts:number;made:number};
 export type ActorSnapshot=Omit<OnlineActor,'queue'|'moves'|'buttons'|'rateAt'|'rateCount'|'receivedAt'>;
@@ -93,9 +93,8 @@ export class OnlineWorld{
     if(this.time<this.pickupLockedUntil)return;
     for(const a of this.ordered(actors)){this.focus(a);if(s.flightKind==='pass'){
       if(collided||Math.hypot(s.ballVelocity.x,s.ballVelocity.y,s.ballVelocity.z)>PRACTICE.catchSpeed||(this.passerId===a.id&&s.releaseAge<PRACTICE.releaseLock))continue;
-      const target={x:a.position.x+Math.sin(a.input.yaw)*.35,y:a.position.y+PRACTICE.playerCatchY,z:a.position.z+Math.cos(a.input.yaw)*.35};
-      const d={x:next.x-prev.x,y:next.y-prev.y,z:next.z-prev.z},den=d.x*d.x+d.y*d.y+d.z*d.z,t=den?Math.max(0,Math.min(1,((target.x-prev.x)*d.x+(target.y-prev.y)*d.y+(target.z-prev.z)*d.z)/den)):0,p={x:prev.x+d.x*t,y:prev.y+d.y*t,z:prev.z+d.z*t};
-      if(Math.abs(p.y-target.y)<=PRACTICE.catchHeightTolerance&&Math.hypot(p.x-target.x,p.y-target.y,p.z-target.z)<=PRACTICE.catchRadius&&isBallPathClear(p,target)&&isBallPathClear(target,{...a.position,y:target.y})){this.acquire(a,p);return false;}
+      const point=passCatchPoint(s,a.input,prev,next);
+      if(point){this.acquire(a,point);return false;}
      }else{const result=evaluateAcquisition(s,a.input,collided?next:prev,next);if(result.reason){if(s.flightKind==='shot'&&!s.resolved)this.outcome(false);this.acquire(a,result.point??next);return false;}}
     }
    },CFG.gravity,(kind,p,strength)=>impactEvent(s,kind,p,strength));

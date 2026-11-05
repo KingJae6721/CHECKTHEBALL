@@ -1,11 +1,38 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ACQUISITION, COURT, PRACTICE } from './court.ts';
-import { acquisitionVolumes, outsideAcquisitionVolumes, evaluateAcquisition } from './acquisition.ts';
+import { acquisitionVolumes, outsideAcquisitionVolumes, evaluateAcquisition, passCatchPoint } from './acquisition.ts';
 import { createState, resetState, stepGame, zeroInput, tryAcquireBall, startCharge, releaseShot as requestShot, CFG, type State } from './simulation.ts';
 const ground=COURT.floorY+COURT.ballRadius;
 function free(y=1.1,z=.6) { const s=createState();s.owner='none';s.phase='RESOLVING';s.flightKind=null;s.player={x:0,y:0,z:0};s.ball={x:0,y,z};s.ballVelocity={x:0,y:0,z:0};s.releaseAge=1;return s; }
 function shot() {const s=free();s.phase='IN_FLIGHT';s.flightKind='shot';s.passFrom='player';s.attempts=1;return s;}
+
+test('passes reach feet and just above the head but not behind or far overhead',()=>{
+ for(const y of [.2,.7,1.3,2.1]){
+  const s=free(y);s.flightKind='pass';s.passFrom='dummy';s.ballVelocity.z=-22;
+  assert.ok(passCatchPoint(s,zeroInput(),s.ball,s.ball));
+  assert.deepEqual([s.score,s.made,s.attempts],[0,0,0]);
+ }
+ for(const p of [{x:0,y:2.4,z:.6},{x:0,y:1.2,z:-.3}]){
+  const s=free();s.flightKind='pass';assert.equal(passCatchPoint(s,zeroInput(),p,p),null);
+ }
+});
+
+test('online chase reach requires actual forward movement and has a fixed cap',()=>{
+ const s=free(1.1,1.9);s.networked=true;s.ballVelocity.z=6;
+ assert.equal(evaluateAcquisition(s,zeroInput()).reason,null);
+ s.locomotion.velocity.z=6;assert.equal(evaluateAcquisition(s,zeroInput()).reason,'AIR_CATCH');
+ s.ball.z=ACQUISITION.air.maxForward+ACQUISITION.chase.maxExtraForward+COURT.ballRadius+.01;
+ assert.equal(evaluateAcquisition(s,zeroInput()).reason,null);
+ s.ball.z=1.9;s.locomotion.velocity.z=-6;assert.equal(evaluateAcquisition(s,zeroInput()).reason,null);
+});
+
+test('expanded pass reach sweeps fast paths without taking an owned ball',()=>{
+ const s=free();s.flightKind='pass';s.ballVelocity.x=22;
+ const a={x:-2,y:2.1,z:.6},b={x:2,y:2.1,z:.6};
+ assert.ok(passCatchPoint(s,zeroInput(),a,b));
+ s.owner='dummy';assert.equal(passCatchPoint(s,zeroInput(),a,b),null);
+});
 
 test('foot volume picks up a moving floor ball well above the old 2m/s cap',()=>{
  const s=free(ground,.4);s.ballVelocity.x=8;assert.ok(tryAcquireBall(s,zeroInput()));assert.equal(s.owner,'player');assert.equal(s.acquisitionEvent?.reason,'GROUND_PICKUP');assert.deepEqual(s.ballVelocity,{x:0,y:0,z:0});
@@ -14,7 +41,7 @@ test('free rising and falling bounces are caught in front of the torso',()=>{
  for(const vy of [7,-7]){const s=free();s.ballVelocity.y=vy;stepGame(s,zeroInput());assert.equal(s.owner,'player');assert.equal(s.acquisitionEvent?.reason,'AIR_CATCH');}
 });
 test('air volume excludes overhead, behind and side balls at short distance',()=>{
- for(const p of [{x:0,y:ACQUISITION.air.maxHeight+.01,z:.6},{x:0,y:1.1,z:-.2},{x:ACQUISITION.air.halfWidth+.01,y:1.1,z:.6}]){
+ for(const p of [{x:0,y:ACQUISITION.air.maxHeight+COURT.ballRadius+.01,z:.6},{x:0,y:1.1,z:-.2},{x:ACQUISITION.air.halfWidth+COURT.ballRadius+.01,y:1.1,z:.6}]){
   const s=free();s.ball=p;assert.equal(tryAcquireBall(s,zeroInput()),false);assert.equal(s.acquisitionBlock,'OUTSIDE_VOLUMES');
  }
  const behindFeet=free(ground,-.5);assert.equal(tryAcquireBall(behindFeet,zeroInput()),false);
@@ -37,7 +64,7 @@ test('airball must leave the whole volume including its radius and then descend'
  s.ballVelocity.y=-4;assert.ok(tryAcquireBall(s,zeroInput()));assert.equal(s.acquisitionEvent?.reason,'AIR_CATCH');assert.equal(s.resolved,true);assert.deepEqual([s.attempts,s.made,s.score],[1,0,0]);
 });
 test('actual descending untouched shot records exit before returning to front catch region',()=>{
- const s=shot();s.ball={x:0,y:2.05,z:.6};s.ballVelocity={x:0,y:-5,z:0};
+ const s=shot();s.ball={x:0,y:ACQUISITION.air.maxHeight+COURT.ballRadius+.05,z:.6};s.ballVelocity={x:0,y:-5,z:0};
  for(let n=0;n<10&&s.owner==='none';n++)stepGame(s,zeroInput());assert.equal(s.shotExited,true);assert.equal(s.shotTouched,false);assert.equal(s.owner,'player');assert.equal(s.acquisitionEvent?.reason,'AIR_CATCH');
 });
 test('airball still inside the shooter region cannot be caught by time alone',()=>{

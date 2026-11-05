@@ -26,11 +26,14 @@ export default function Game(){
  function leave(){joinAttempt.current++;setJoining(false);sessionRef.current?.close();sessionRef.current=undefined;setSession(undefined);setError('');}
  const passing=state.phase==='PASS_CHARGING';
  const power=passing?state.passCharge/PASS.maxCharge:state.charge/CFG.maxCharge;
+ const pingMs=state.online?.pingMs;
+ const pingQuality=pingMs==null?'unknown':pingMs<=100?'good':pingMs<=200?'fair':'poor';
+ const pingDescription=pingMs==null?(state.online?.pingStatus??'핑 측정 중'):`게임 서버 왕복 지연 ${pingMs}ms · ${pingQuality==='good'?'좋음':pingQuality==='fair'?'보통':'나쁨'}`;
  const accuracy=state.attempts?Math.round(state.made/state.attempts*100):0;
  return <main className="game">
   <canvas ref={canvas} aria-label="1인칭 농구 코트. 플레이 버튼으로 마우스를 잠그고 WASD로 이동하세요."/>
   <div className="vignette"/>
-  <header className="topbar"><a className="brand" href="/" aria-label="CheckTheBall 홈"><span className="brand-icon">◉</span> CheckTheBall<span className="brand-slash">/</span></a><div className="mode"><i/> {state.online?'온라인 자유 연습':modes[state.practice.mode]} <span>{state.online?'ONLINE':'OFFLINE'}</span></div><div className="top-right"><span className="offline">{state.online?'SERVER AUTHORITY':'LOCAL SIMULATION'}</span><button className="icon-button" onClick={()=>setHelp(!help)} aria-label="조작 안내">?</button></div></header>
+  <header className="topbar"><a className="brand" href="/" aria-label="CheckTheBall 홈"><span className="brand-icon">◉</span> CheckTheBall<span className="brand-slash">/</span></a><div className="mode"><i/> {state.online?'온라인 자유 연습':modes[state.practice.mode]} <span>{state.online?'ONLINE':'OFFLINE'}</span></div><div className="top-right">{state.online&&<span className={`network-ping ${pingQuality}`} title={pingDescription} aria-label={pingDescription}>{pingMs==null?'--':pingMs}<small>ms</small></span>}<span className="offline">{state.online?'SERVER AUTHORITY':'LOCAL SIMULATION'}</span><button className="icon-button" onClick={()=>setHelp(!help)} aria-label="조작 안내">?</button></div></header>
   {state.online&&<OnlineScoreboard players={state.online.players} selfId={state.online.selfId} ownerId={state.online.ownerId}/>}
   <aside className="session"><div className="eyebrow">{state.online?'YOUR STATS':'YOUR SESSION'}</div><div className="score"><strong>{String(state.online?state.online.players.find(p=>p.id===state.online!.selfId)?.score??0:state.score).padStart(2,'0')}</strong><span>POINTS</span></div><div className="stats"><div><strong>{state.made}<small> / {state.attempts}</small></strong><span>MADE / SHOTS</span></div><div><strong>{accuracy}<small>%</small></strong><span>ACCURACY</span></div></div>{state.online&&<div className="online-scores">{state.online.players.map(p=><div key={p.id}>{p.id===state.online!.selfId?'나':'상대'} · {p.score}점 · {p.made}/{p.attempts}</div>)}</div>}<button className="reset" disabled={!!session} onClick={()=>runtime.current?.reset()}><span>↺</span> 세션 초기화 <kbd>R</kbd></button></aside>
   <div className="court-label"><span className="eyebrow">THE NEIGHBORHOOD</span><h1>내 코트, 내 리듬.</h1><p>FIRST PERSON BASKETBALL · SPRINT 01</p></div>
