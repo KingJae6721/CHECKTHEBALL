@@ -17,7 +17,7 @@ test('one context, decoded assets reused, bounded voices, mute/visibility/dispos
   globalThis.AudioContext=Context as unknown as typeof AudioContext;
   globalThis.fetch=async()=>({ok:true,arrayBuffer:async()=>new ArrayBuffer(8)}) as Response;
   Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:()=>stored,setItem:(_k:string,v:string)=>{stored=v;}}});
-  const a=new AudioManager();await a.unlock();await a.unlock();assert.equal(contexts,1);assert.equal(decodes,10);
+  const a=new AudioManager();await a.unlock();await a.unlock();assert.equal(contexts,1);assert.equal(decodes,23);
   const play=(kind:keyof typeof AUDIO.effects,now:number)=>a.play({key:'event:test',kind,position:{x:0,y:0,z:0},strength:7},{x:0,y:0,z:0},0,now);
   play('rim',1000);play('net',1000);assert.ok(sourceList[1].startTime!>sourceList[0].startTime!);
   for(let round=0;round<3;round++)for(const kind of Object.keys(AUDIO.effects))play(kind as keyof typeof AUDIO.effects,2000+round*1000);

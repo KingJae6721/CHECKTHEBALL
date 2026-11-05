@@ -1,10 +1,10 @@
-import {AUDIO,AUDIO_STORAGE_KEY,parseAudioSettings,type AudioSettings,type SoundKind} from './audioConfig';
+import {AUDIO,AUDIO_STORAGE_KEY,parseAudioSettings,type AudioSettings} from './audioConfig';
 import type {SoundCue} from './audioTimeline';
 import type {Vec} from '../../../packages/game-core/src/simulation';
 type Voice={gain:GainNode;pan:StereoPannerNode;source:AudioBufferSourceNode|null};
 export class AudioManager{
  settings:AudioSettings;private context?:AudioContext;private master?:GainNode;private compressor?:DynamicsCompressorNode;
- private voices:Voice[]=[];private buffers=new Map<SoundKind,AudioBuffer>();private loading?:Promise<void>;
+ private voices:Voice[]=[];private buffers=new Map<string,AudioBuffer>();private loading?:Promise<void>;
  private last=new Map<string,number>();private disposed=false;private hidden=false;
  constructor(){let raw=null;try{raw=localStorage.getItem(AUDIO_STORAGE_KEY);}catch{}this.settings=parseAudioSettings(raw);}
  get ready(){return this.context?.state==='running';}
@@ -21,17 +21,20 @@ export class AudioManager{
    if(!this.loading)this.loading=this.load();await resume;await this.loading;
   }catch{/* Audio failure must never fail the game. */}
  }
- private async load(){const context=this.context!;await Promise.all(Object.entries(AUDIO.effects).map(async([kind,effect])=>{
-  try{const r=await fetch(`/assets/audio/${effect.file}`);if(!r.ok)return;const buffer=await context.decodeAudioData(await r.arrayBuffer());if(!this.disposed)this.buffers.set(kind as SoundKind,buffer);}catch{}
+ private async load(){const context=this.context!,files=new Set<string>(Object.values(AUDIO.effects).flatMap<string>(effect=>[...effect.files]));await Promise.all([...files].map(async file=>{
+  try{const r=await fetch(`/assets/audio/${file}`);if(!r.ok)return;const buffer=await context.decodeAudioData(await r.arrayBuffer());if(!this.disposed)this.buffers.set(file,buffer);}catch{}
  }));}
  play(cue:SoundCue,listener:Vec,yaw:number,now:number){
-  const context=this.context,buffer=this.buffers.get(cue.kind);
-  if(this.disposed||this.hidden||this.settings.muted||this.settings.volume<=0||context?.state!=='running'||!buffer)return;
+  const context=this.context;
+  if(this.disposed||this.hidden||this.settings.muted||this.settings.volume<=0||context?.state!=='running')return;
   const effect=AUDIO.effects[cue.kind],sourceKey=cue.actorId??'world';
   const key=`${cue.kind}:${sourceKey}`;if(now-(this.last.get(key)??-Infinity)<effect.interval)return;
   const dx=cue.position.x-listener.x,dy=cue.position.y-listener.y,dz=cue.position.z-listener.z,distance=Math.hypot(dx,dy,dz);
   if(!cue.near&&distance>AUDIO.maxDistance)return;
-  const voice=this.voices.find(v=>!v.source);if(!voice)return;this.last.set(key,now);
+  const voice=this.voices.find(v=>!v.source);if(!voice)return;
+  const available=effect.files.filter(file=>this.buffers.has(file));if(!available.length)return;
+  const buffer=this.buffers.get(available[Math.floor(Math.random()*available.length)])!;
+  this.last.set(key,now);
   while(this.last.size>128)this.last.delete(this.last.keys().next().value!);
   const attenuation=cue.near?1:Math.min(1,AUDIO.referenceDistance/(AUDIO.referenceDistance+AUDIO.rolloff*Math.max(0,distance-AUDIO.referenceDistance)));
   const impact=cue.kind==='floor'||cue.kind==='rim'||cue.kind==='board'||cue.kind==='blockHit'?Math.min(1,Math.max(.12,cue.strength/7)):Math.min(1,cue.strength);
