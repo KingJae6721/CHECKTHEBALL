@@ -74,6 +74,8 @@ export const SHOT_FORM = {
   setForward: .40, setUp: .14, setSide: .08,
   releaseForward: .50, releaseUp: .28, releaseSide: 0,
   groundHipBend: .28, shoulderLift: .035, groundedHeight: 0,
+  followHoldSeconds: .28, followReturnSeconds: .24, followReachSeconds: .08,
+  followHandUp: .60, followHandForward: .18,
 };
 
 // Endpoints reuse DRIBBLE.side/forward and idle/move/sprintHeight to avoid seams.

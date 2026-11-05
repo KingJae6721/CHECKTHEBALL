@@ -37,9 +37,9 @@ test('same angle with more power travels further before first floor contact',()=
  }
  const weak=range(0),strong=range(PASS.maxCharge);assert.ok(strong>weak*2);assert.ok(weak>3);assert.ok(strong>15);
 });
-test('pass and shot cannot charge simultaneously in either order',()=>{
- const a=createState();assert.ok(startPassCharge(a));assert.equal(startPassCharge(a),false);assert.equal(startCharge(a),false);assert.equal(releaseShot(a,zeroInput()),false);assert.equal(a.phase,'PASS_CHARGING');
- const b=createState();assert.ok(startCharge(b));assert.equal(startPassCharge(b),false);assert.equal(releasePass(b,zeroInput()),false);assert.equal(b.phase,'CHARGING');
+test('shot and pass charge switch in either direction without simultaneous charge or stale release',()=>{
+ const a=createState();assert.ok(startPassCharge(a));assert.equal(startPassCharge(a),false);a.passCharge=.4;assert.ok(startCharge(a));assert.equal(a.passCharge,0);assert.equal(a.charge,0);assert.equal(releasePass(a,zeroInput()),false);assert.equal(a.phase,'CHARGING');assert.equal(a.playerMotion.pending,null);
+ const b=createState();assert.ok(startCharge(b));b.charge=.5;assert.ok(startPassCharge(b));assert.equal(b.charge,0);assert.equal(b.passCharge,0);assert.equal(releaseShot(b,zeroInput()),false);assert.equal(b.phase,'PASS_CHARGING');assert.equal(b.playerMotion.pending,null);
 });
 test('cancel blocks the eventual mouseup and clears stored power',()=>{
  const s=charged();cancelPassCharge(s);assert.equal(s.passCharge,0);assert.equal(s.phase,'HELD');assert.equal(releasePass(s,zeroInput()),false);assert.equal(s.owner,'player');assert.equal(s.lastPlayerPass,null);

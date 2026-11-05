@@ -67,9 +67,11 @@ export function queueRelease(m:BallMotion,intent:ReleaseIntent,from:Vec) {
 }
 export function cancelMotion(m:BallMotion,from:Vec,owned:boolean) {m.crossover=null;m.pending=null;m.fired=false;if(owned)beginCatch(m,from);else {m.action='IDLE';m.elapsed=0;}}
 export function markReleased(m:BallMotion,point:Vec,kind:ReleaseIntent['kind']) {m.action='RELEASE';m.elapsed=0;m.fired=true;m.lastKind=kind;m.releasePoint={...point};m.pending=null;}
+function followDuration(m:BallMotion){return m.lastKind==='shot'?SHOT_FORM.followHoldSeconds+SHOT_FORM.followReturnSeconds:DRIBBLE.followSeconds;}
+function followFade(m:BallMotion){return m.lastKind==='shot'?smooth((m.elapsed-SHOT_FORM.followHoldSeconds)/SHOT_FORM.followReturnSeconds):smooth(m.elapsed/DRIBBLE.followSeconds);}
 export function updateUnownedMotion(m:BallMotion,dt:number,moving=false) {
   m.crossover=null;m.clock+=dt;m.locomotion=moving?'MOVE':'IDLE';
-  if(m.action==='RELEASE'&&m.fired){m.elapsed+=dt;if(m.elapsed>=DRIBBLE.followSeconds){m.action='IDLE';m.elapsed=0;}}
+  if(m.action==='RELEASE'&&m.fired){m.elapsed+=dt;if(m.elapsed>=followDuration(m)){m.action='IDLE';m.elapsed=0;}}
   else if(m.action!=='IDLE'){m.action='IDLE';m.elapsed=0;m.pending=null;}
 }
 export function controlledPosition(s:State,input:Input,owner:'player'|'dummy'):Vec {
@@ -127,10 +129,10 @@ export function advanceControlledMotion(s:State,input:Input,owner:'player'|'dumm
 export function characterPose(s:State,input:Input,owner:'player'|'dummy',fixedBase?:Vec) {
   const m=owner==='player'?s.playerMotion:s.dummyMotion,actorBase=fixedBase??actorPosition(s,owner),base={...actorBase,y:actorBase.y+(owner==='player'?COURT.floorY:0)},yaw=fixedBase?Math.atan2(s.player.x-fixedBase.x,s.player.z-fixedBase.z):(m.action==='DRIBBLE'||m.action==='CROSSOVER'||m.action==='CATCH')?m.dribbleYaw:actorYaw(s,input,owner),owned=!fixedBase&&s.owner===owner;
   // Aim pitch orients hands around the ball; the torso/shoulders stay upright.
-  const aimBlend=m.action==='GATHER'?smooth(m.elapsed/DRIBBLE.gatherSeconds):(m.action==='SHOT_CHARGE'||m.action==='PASS_CHARGE'||(m.action==='RELEASE'&&!m.fired))?1:(m.action==='RELEASE'&&m.fired)?1-smooth(m.elapsed/DRIBBLE.followSeconds):0;
+  const aimBlend=m.action==='GATHER'?smooth(m.elapsed/DRIBBLE.gatherSeconds):(m.action==='SHOT_CHARGE'||m.action==='PASS_CHARGE'||(m.action==='RELEASE'&&!m.fired))?1:(m.action==='RELEASE'&&m.fired)?1-followFade(m):0;
   const pitch=owner==='player'&&!s.defense.kind?input.pitch*aimBlend:0;
   const isShot=(owner==='dummy'&&s.practice.mode==='BLOCK'&&(m.action==='GATHER'||m.action==='SHOT_CHARGE'||(m.action==='RELEASE'&&m.lastKind==='shot')))||owner==='player'&&(s.phase==='CHARGING'||m.pending?.kind==='shot'||(m.action==='RELEASE'&&m.fired&&m.lastKind==='shot'));
-  const shooting=isShot?(m.action==='GATHER'?smooth(m.elapsed/DRIBBLE.gatherSeconds):m.action==='RELEASE'&&m.fired?1-smooth(m.elapsed/DRIBBLE.followSeconds):1):0;
+  const shooting=isShot?(m.action==='GATHER'?smooth(m.elapsed/DRIBBLE.gatherSeconds):m.action==='RELEASE'&&m.fired?1-followFade(m):1):0;
   const crossProgress=m.crossover?.stage==='ACTIVE'?clamp(m.crossover.elapsed/CROSSOVER.duration):0;
   const crossing=m.action==='CROSSOVER'&&m.crossover?.stage==='ACTIVE';
   const crossSide=m.crossover?.from==='left'?-1:1;
@@ -187,7 +189,14 @@ export function characterPose(s:State,input:Input,owner:'player'|'dummy',fixedBa
   } else if(m.action==='RELEASE'&&m.fired) {
     const direction=owner==='player'?passDirection(input.yaw,input.pitch):{x:Math.sin(yaw),y:0,z:Math.cos(yaw)};
     const p={x:m.releasePoint.x+direction.x*.1,y:m.releasePoint.y+direction.y*.1,z:m.releasePoint.z+direction.z*.1};
-    const hands=isShot?shotHands(p):paired(p),fade=smooth(m.elapsed/DRIBBLE.followSeconds);right=mix(hands.right,right,fade);left=mix(hands.left,left,fade);if(isShot)wrist=.8*(1-fade);
+    const hands=isShot?shotHands(p):paired(p),fade=followFade(m);
+    if(isShot){
+      const extended=localPoint(base,yaw,CHARACTER.shoulderX-.02,CHARACTER.shoulderY-pelvisDrop+shoulderLift+SHOT_FORM.followHandUp,SHOT_FORM.followHandForward-pelvisBack);
+      const reach=smooth(m.elapsed/SHOT_FORM.followReachSeconds);
+      right=mix(mix(hands.right,extended,reach),right,fade);
+      left=mix(hands.left,left,smooth(m.elapsed/.16));
+      rightWrist=.9*(1-fade);leftWrist=.4*(1-smooth(m.elapsed/.16));
+    }else{right=mix(hands.right,right,fade);left=mix(hands.left,left,fade);}
   }
   if(!owned&&(!(m.action==='RELEASE'&&m.fired)||defenseAction)) {
     right=mix(right,localPoint(base,yaw,DEFENSE.handSide,DEFENSE.handHeight,DEFENSE.handForward),defending);
@@ -195,7 +204,7 @@ export function characterPose(s:State,input:Input,owner:'player'|'dummy',fixedBa
     if(owner==='player'){const swing=Math.sin(s.locomotion.phase);right=mix(right,localPoint(base,yaw,.3,1.1+.05*swing,.2+.14*swing),s.defense.running);left=mix(left,localPoint(base,yaw,-.3,1.1-.05*swing,.2-.14*swing),s.defense.running);}
     if(defenseAction){right=defenseHand(actorBase,yaw,defenseAction,s.defense.elapsed);if(defenseAction==='BLOCK'){const side=(right.x-base.x)*Math.cos(yaw)-(right.z-base.z)*Math.sin(yaw);left={x:right.x-2*Math.cos(yaw)*side,y:right.y,z:right.z+2*Math.sin(yaw)*side};}}
   }
-  if(m.action!=='DRIBBLE'&&!crossing){rightWrist=leftWrist=wrist;}
+  if(m.action!=='DRIBBLE'&&!crossing&&!(m.action==='RELEASE'&&m.fired&&isShot)){rightWrist=leftWrist=wrist;}
   const reachable=(p:Vec,side:number)=>{
     const shoulder=localPoint(base,yaw,side*CHARACTER.shoulderX+torsoSide,CHARACTER.shoulderY-pelvisDrop+shoulderLift,-pelvisBack);
     const dx=p.x-shoulder.x,dy=p.y-shoulder.y,dz=p.z-shoulder.z;

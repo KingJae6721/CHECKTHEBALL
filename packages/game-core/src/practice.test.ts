@@ -27,9 +27,9 @@ test('release lock blocks immediate self pickup and self catch',()=>{
  const s=loose();s.passFrom='player';s.releaseAge=0;assert.equal(tryPickup(s),false);s.releaseAge=PRACTICE.releaseLock;assert.equal(tryPickup(s),true);
  const p=createState();assert.ok(passBall(p,zeroInput()));const target=playerCatchPosition(p);p.ballVelocity={x:0,y:0,z:1};assert.equal(catchPass(p,target,target),false);assert.equal(p.owner,'none');
 });
-test('passes require player ownership and reject charging or repeated release',()=>{
+test('passes require ownership, replace shot charge and reject repeated release',()=>{
  for(const owner of ['none','dummy'] as const){const s=createState();s.owner=owner;assert.equal(passBall(s,zeroInput()),false);}
- const s=createState();startCharge(s);assert.equal(passBall(s,zeroInput()),false);assert.equal(s.phase,'CHARGING');
+ const s=createState();startCharge(s);assert.ok(passBall(s,zeroInput()));assert.equal(s.flightKind,'pass');assert.equal(s.attempts,0);
  const p=createState();assert.ok(passBall(p,zeroInput()));assert.equal(passBall(p,zeroInput()),false);assert.equal(startCharge(p),false);assert.equal(releaseShot(p,zeroInput()),false);
 });
 test('losing ownership while charging cancels charge',()=>{

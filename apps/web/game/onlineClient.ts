@@ -52,7 +52,7 @@ export class OnlineSession{
   if(!this.connected||this.closed)return;
   const other=actions.filter(a=>a!=='jump');if(actions.includes('jump'))this.pendingJump=true;if(!other.length)return;
   const seq=this.write(input,other);
-  if(other.includes('shotDown')&&this.ownsBall)this.phaseOverride={slow:true,seq};
+  if(this.ownsBall&&(other.includes('shotDown')||other.includes('passDown')))this.phaseOverride={slow:other.includes('shotDown'),seq};
   if(other.includes('cancel')||other.includes('movementSync')){const cancel=other.includes('cancel');this.cancelCounts[reason]=(this.cancelCounts[reason]??0)+1;this.record(cancel?'cancel':'movementSync',{reason,seq});this.barrier=seq;this.pendingJump=false;if(cancel)this.phaseOverride={slow:false,seq};this.prediction.pending.length=0;this.prediction.clearOffset();this.accumulator=0;this.lastPump=0;this.prediction.writer='client:cancel-barrier';}
  }
  advance(now:number,input:Input){

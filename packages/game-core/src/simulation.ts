@@ -18,7 +18,7 @@ export type Input = { x: number; z: number; sprint: boolean; jump: boolean; yaw:
 export type State = { events:EventLog; networked?:boolean; locomotion:Locomotion; defense:DefenseState; practice:PracticeState; playerMotion:BallMotion; dummyMotion:BallMotion; passCharge: number; lastPlayerPass: PlayerPassLaunch | null; shotTouched: boolean; shotExited: boolean; acquisitionEvent: AcquisitionEvent | null; acquisitionBlock: AcquisitionBlock; owner: Owner; flightKind: FlightKind; passFrom: Owner; releaseAge: number; looseAge: number; dummyHold: number; player: Vec; vy: number; ball: Vec; ballVelocity: Vec; phase: Phase; charge: number; score: number; attempts: number; made: number; shotId: number; resolved: boolean; shotPoints: number; flight: number; message: string; lastTiming: number | null; tick: number };
 export const zeroInput = (): Input => ({ x: 0, z: 0, sprint: false, jump: false, yaw: 0, pitch: 0 });
 export function createState(): State { return { events:createEventLog(),locomotion:createLocomotion(),defense:createDefense(),practice:createPractice(),playerMotion:createMotion('DRIBBLE'), dummyMotion:createMotion(), passCharge: 0, lastPlayerPass: null, shotTouched: false, shotExited: false, acquisitionEvent: null, acquisitionBlock: 'OWNED_BY_PLAYER', owner: 'player', flightKind: null, passFrom: 'none', releaseAge: 0, looseAge: 0, dummyHold: 0, player: { x: 0, y: 0, z: -1.5 }, vy: 0, ball: { x: DRIBBLE.side, y: DRIBBLE.idleHeight, z: -1.5+DRIBBLE.forward }, ballVelocity: { x: 0, y: 0, z: 0 }, phase: 'HELD', charge: 0, score: 0, attempts: 0, made: 0, shotId: 0, resolved: false, shotPoints: 1, flight: 0, message: '라인에 서서 첫 슛을 던져보세요', lastTiming: null, tick: 0 }; }
-export function startCharge(s: State) { if (s.owner !== 'player' || s.phase !== 'HELD' || !!s.defense.kind) return false; s.phase = 'CHARGING'; s.charge = 0; beginGather(s.playerMotion,s.ball); return true; }
+export function startCharge(s: State) { if (s.owner !== 'player' || (s.phase !== 'HELD'&&s.phase!=='PASS_CHARGING') || !!s.defense.kind || !!s.playerMotion.pending) return false; s.phase = 'CHARGING'; s.charge = 0; s.passCharge=0; beginGather(s.playerMotion,s.ball); return true; }
 export function cancelCharge(s: State) { if (s.phase === 'CHARGING') { s.phase = s.owner==='none'?'RESOLVING':'HELD'; s.charge = 0; cancelMotion(s.playerMotion,s.ball,s.owner==='player'); } }
 export function pointsAt(p: Vec) { return Math.hypot(p.x - CFG.rim.x, p.z - CFG.rim.z) > CFG.arc ? 2 : 1; }
 export function rimCrossing(a: Vec, b: Vec) { if (a.y <= CFG.rim.y || b.y > CFG.rim.y || b.y >= a.y) return false; const t = (CFG.rim.y - a.y) / (b.y - a.y); const x = a.x + (b.x - a.x) * t; const z = a.z + (b.z - a.z) * t; return Math.hypot(x - CFG.rim.x, z - CFG.rim.z) <= CFG.rimRadius * Math.cos(Math.PI / COURT.rimSegments) - COURT.rimTubeRadius - CFG.ballRadius; }
@@ -145,8 +145,8 @@ function beginPass(s: State,from: 'player'|'dummy',start: Vec,velocity: Vec) {
   s.passFrom=from;s.releaseAge=0;s.looseAge=0;s.flight=0;s.dummyHold=0;s.charge=0;
 }
 export function startPassCharge(s: State) {
-  if(s.owner!=='player'||s.phase!=='HELD'||!!s.defense.kind)return false;
-  s.phase='PASS_CHARGING';s.passCharge=0;beginGather(s.playerMotion,s.ball);s.message='패스 충전 · 우클을 놓으면 발사';return true;
+  if(s.owner!=='player'||(s.phase!=='HELD'&&s.phase!=='CHARGING')||!!s.defense.kind||!!s.playerMotion.pending)return false;
+  s.phase='PASS_CHARGING';s.passCharge=0;s.charge=0;beginGather(s.playerMotion,s.ball);s.message='패스 충전 · 우클을 놓으면 발사';return true;
 }
 export function cancelPassCharge(s: State) {
   if(s.phase==='PASS_CHARGING') {s.phase=s.owner==='none'?'RESOLVING':'HELD';s.message='패스 충전 취소';cancelMotion(s.playerMotion,s.ball,s.owner==='player');}
