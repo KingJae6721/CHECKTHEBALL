@@ -105,12 +105,13 @@ export function stepGame(s: State, input: Input, dt = CFG.dt) {
 
 export function makeLoose(s: State) { s.owner='none'; s.flightKind=null; s.phase='RESOLVING'; s.charge=0; s.looseAge=0; s.dummyHold=0; }
 export function giveBall(s: State, owner: 'player'|'dummy',point?:Vec) {
+  const caught=s.owner!==owner&&!!point;
   cancelAllCharges(s);cancelMotion(s.dummyMotion,s.ball,false); s.owner=owner; s.flightKind=null; s.phase='HELD'; s.charge=0;
   s.ballVelocity={x:0,y:0,z:0}; s.looseAge=0; s.flight=0;
   s.dummyHold=owner==='dummy'?PRACTICE.dummyHoldSeconds:0;
   s.playerMotion.pending=null;s.dummyMotion.pending=null;
   const motion=owner==='player'?s.playerMotion:s.dummyMotion,hand=motion.currentDribbleHand,yaw=owner==='dummy'?dummyYaw(s):motion.dribbleYaw;Object.assign(motion,createMotion(point?'CATCH':'DRIBBLE'));motion.currentDribbleHand=hand;motion.dribbleYaw=yaw;
-  if(point){s.ball={...point};beginCatch(motion,point);}
+  if(point){s.ball={...point};beginCatch(motion,point);if(caught&&!s.networked)emitGameEvent(s,'catch',point,1,owner);}
 }
 export function dummyYaw(s: State) { return Math.atan2(s.player.x-DUMMY.position.x,s.player.z-DUMMY.position.z); }
 export function dummyCatchPosition(s: State): Vec {

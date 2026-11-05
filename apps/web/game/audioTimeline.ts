@@ -19,7 +19,7 @@ export class AudioTimeline{
  }
  drain(displayTime:number,selfTime:number,selfId:string):GameEvent[]{
   const ready:GameEvent[]=[],future:GameEvent[]=[];
-  for(const e of this.pending){const time=e.actorId===selfId&&(e.kind==='jump'||e.kind==='land'||e.kind==='blockJump')?selfTime:displayTime;
+  for(const e of this.pending){const time=e.actorId===selfId&&(e.kind==='jump'||e.kind==='land'||e.kind==='blockJump'||e.kind==='catch')?selfTime:displayTime;
    if(e.time>time)future.push(e);else if(time-e.time<=AUDIO.lateMs)ready.push(e);
   }this.pending=future;return ready;
  }

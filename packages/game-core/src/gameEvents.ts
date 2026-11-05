@@ -1,5 +1,5 @@
 import type {Vec} from './simulation';
-export type GameEventKind='floor'|'rim'|'board'|'net'|'jump'|'land'|'blockJump'|'blockHit';
+export type GameEventKind='floor'|'rim'|'board'|'net'|'catch'|'jump'|'land'|'blockJump'|'blockHit';
 export type GameEvent={eventId:number;kind:GameEventKind;serverTick:number;time:number;actorId:string|null;shotId:number;actionId:string;position:Vec;strength:number;contacted?:boolean};
 export type EventLog={sequence:number;recent:GameEvent[];impactAt:Partial<Record<GameEventKind,number>>;shotId:number;rim:boolean;board:boolean};
 export const EVENT_LIMITS={capacity:128,retentionMs:2000,impactMinSpeed:.65,contactGapMs:60};

@@ -9,8 +9,9 @@ export const AUDIO = {
         dribble: { files: bounceFiles, gain: .75, interval: 160 }, floor: { files: bounceFiles, gain: .75, interval: 65 },
         rim: { files: rimFiles, gain: .65, interval: 65 },
         board: { files: ['board.wav'], gain: .65, interval: 65 }, net: { files: swishFiles, gain: .5, interval: 100 },
+        catch: { files: ['ball_catch_01.wav', 'ball_catch_02.wav', 'ball_catch_03.wav'], gain: .65, interval: 120 },
         jump: { files: ['jump.wav'], gain: .35, interval: 200 }, land: { files: ['land.wav'], gain: .5, interval: 200 },
-        blockJump: { files: ['block-jump.wav'], gain: .4, interval: 200 }, blockHit: { files: ['block-hit.wav'], gain: .7, interval: 100 },
+        blockJump: { files: ['jump.wav'], gain: .4, interval: 200 }, blockHit: { files: ['block-hit.wav'], gain: .7, interval: 100 },
     }
 } as const;
 export type SoundKind = keyof typeof AUDIO.effects;

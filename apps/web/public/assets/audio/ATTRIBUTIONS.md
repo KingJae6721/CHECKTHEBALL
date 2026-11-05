@@ -48,10 +48,9 @@ the seven user-supplied swish variations listed below.
 - Source and deployed WAV may be shared under CC BY 4.0; preserve this attribution/license notice.
 - Used only for confirmed baskets, not passes. The same recording currently serves clean and contact baskets.
 
-## Synthetic temporary effects (4)
+## Synthetic temporary effects (2)
 
-`jump.wav`, `land.wav`,
-`block-jump.wav`, `block-hit.wav`: generated for this project by
+`land.wav`, `block-hit.wav`: generated for this project by
 `scripts/prepare-audio.py` from deterministic oscillators/noise/envelopes.
 These contain no external samples and are project-generated assets, not real basketball recordings.
 No voice/grunt samples are included. Backboard and net effects are actual recordings listed above.
@@ -77,3 +76,14 @@ No voice/grunt samples are included. Backboard and net effects are actual record
 - Rim collisions randomly select a rim variation. Confirmed baskets randomly select a swish variation.
   The same swish pool is currently used for both clean and rim/backboard-contact baskets.
 - The former synthetic `rim.wav` and single `net.wav` are not selected for playback.
+
+## User-supplied catch and jump recordings
+
+- `sounds/catch/ball_catch_01.WAV` through `ball_catch_03.WAV` → deployed lowercase filenames.
+- `sounds/character/jump.wav` → deployed `jump.wav`, replacing the synthetic jump sample.
+- Files are copied unchanged; runtime gain/distance attenuation and ±2% pitch variation apply.
+- Source, creator and license have not been supplied. No redistribution permission is asserted here.
+- Successful catches/pickups randomly select one of the three catch recordings. Resets and
+  automatic safety recovery are silent. Online catches are authoritative, never replay-predicted.
+- Ordinary jumps and block jumps share the recorded jump buffer without double playback.
+  The former synthetic `block-jump.wav` is no longer selected.

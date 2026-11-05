@@ -35,9 +35,9 @@ for original, target in [('basketball_backboard.wav','board.wav'), ('basketball_
     elif not (out / target).exists():
         raise FileNotFoundError('Missing licensed source: ' + str(source))
 
-for group,count in [('bounce',5),('rim',5),('swish',7)]:
+for group,count in [('bounce',5),('rim',5),('swish',7),('catch',3)]:
     for number in range(1,count+1):
-        name = '%s_%02d.WAV' % (group,number)
+        name = '%s_%02d.WAV' % ('ball_catch' if group=='catch' else group,number)
         source = root / 'sounds' / group / name
         if not source.exists():
             source = root / 'sounds' / name
@@ -47,9 +47,14 @@ for group,count in [('bounce',5),('rim',5),('swish',7)]:
         elif not target.exists():
             raise FileNotFoundError('Missing audio variation: ' + str(source))
 
+source = root / 'sounds/character/jump.wav'
+if source.exists():
+    shutil.copyfile(source,out / 'jump.wav')
+elif not (out / 'jump.wav').exists():
+    raise FileNotFoundError('Missing jump sound: ' + str(source))
+
 # Original procedural placeholders, NOT recordings of basketball equipment/shoes.
-specs={'jump':(.13,0,18,1),'land':(.15,75,25,.35),
-       'block-jump':(.16,0,16,1),'block-hit':(.12,130,25,.6)}
+specs={'land':(.15,75,25,.35),'block-hit':(.12,130,25,.6)}
 for seed,(name,(seconds,freq,decay,noise)) in enumerate(specs.items()):
     if (out / (name+'.wav')).exists():
         continue
@@ -61,4 +66,4 @@ for seed,(name,(seconds,freq,decay,noise)) in enumerate(specs.items()):
         samples.append(attack*math.exp(-decay*t)*((1-noise)*tone+noise*filtered))
     for i in range(int(rate*.006)):samples[-1-i]*=i/(rate*.006)
     save(name+'.wav',samples)
-print('Prepared bounce x5, rim x5, swish x7; backboard and other existing assets preserved.')
+print('Prepared bounce x5, rim x5, swish x7, catch x3 and recorded jump; other assets preserved.')

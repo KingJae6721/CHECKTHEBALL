@@ -2,7 +2,7 @@
 // processedMoveSeq is the contiguous retired frontier (executed OR explicitly discarded).
 // processedInputSeq identifies its transport seq; processedActionSeq acknowledges processed actions.
 // Replay only moveSeq > processedMoveSeq. movementSync retires movement without cancelling actions.
-export const NETWORK={protocolVersion:4,tickRate:60,snapshotRate:20,inputRate:60,inputTimeoutMs:600,maxMoveAgeMs:200,maxMessagesPerSecond:100,maxActions:32,maxMessageLength:2048,interpolationMs:100,maxQueuedMoves:12,maxPendingInputs:64,maxPredictionSteps:4,maxPredictionGapMs:250,positionEpsilon:.0001,visualSnapDistance:.08,visualResponse:14};
+export const NETWORK={protocolVersion:5,tickRate:60,snapshotRate:20,inputRate:60,inputTimeoutMs:600,maxMoveAgeMs:200,maxMessagesPerSecond:100,maxActions:32,maxMessageLength:2048,interpolationMs:100,maxQueuedMoves:12,maxPendingInputs:64,maxPredictionSteps:4,maxPredictionGapMs:250,positionEpsilon:.0001,visualSnapDistance:.08,visualResponse:14};
 export const actions=['jump','shotDown','shotUp','passDown','passUp','crossover','steal','block','cancel','movementSync'] as const;
 export type Action=typeof actions[number];
 export type InputMessage={seq:number;moveSeq?:number;x:number;z:number;sprint:boolean;yaw:number;pitch:number;actions:Action[]};

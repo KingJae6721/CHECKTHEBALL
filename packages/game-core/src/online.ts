@@ -74,7 +74,7 @@ export class OnlineWorld{
   }this.commit(a);
  }
  ordered(actors:OnlineActor[]){return this.tick%2?[...actors].reverse():actors;}
- acquire(a:OnlineActor,point:Vec){const s=this.focus(a);giveBall(s,'player',point);this.commit(a);this.state.message='캐치 · '+a.id.slice(0,5);}
+ acquire(a:OnlineActor,point:Vec,playCatch=true){const s=this.focus(a);giveBall(s,'player',point);if(playCatch)emitGameEvent(s,'catch',point,1,a.id);this.commit(a);this.state.message='캐치 · '+a.id.slice(0,5);}
  outcome(made:boolean){const before=this.state.score;resolve(this.state,made,this.shooterId??undefined);if(this.state.score!==before&&this.shooterId){const actor=this.actors.get(this.shooterId),record=actor??this.ledger.get(this.shooterId);if(record){record.score+=this.state.score-before;record.made++;}}}
  ballStep(actors:OnlineActor[],dt:number){const s=this.state;s.tick=this.tick;s.releaseAge+=dt;
   for(const a of actors){this.focus(a);if(this.ownerId!==a.id)updateUnownedMotion(a.motion,dt,a.locomotion.speed>.015);advanceDefense(s,a.input,dt);this.commit(a);}
@@ -82,7 +82,7 @@ export class OnlineWorld{
   if(owner){this.focus(owner);if(owner.phase==='CHARGING'&&!owner.motion.pending)s.charge=Math.min(CFG.maxCharge,(this.time-(this.chargeStartedAt.get(owner.id)??this.time))/1000);if(owner.phase==='PASS_CHARGING'&&!owner.motion.pending)s.passCharge=Math.min(PASS.maxCharge,(this.time-(this.chargeStartedAt.get(owner.id)??this.time))/1000);
    if(advanceControlledMotion(s,owner.input,'player',dt)){const kind=owner.motion.pending?.kind;firePendingPlayer(s);if(s.owner==='none'){this.passerId=owner.id;if(kind==='shot'){this.shooterId=owner.id;owner.attempts++;}}}this.commit(owner);
    if(this.ownerId===owner.id)s.ball=controlledPosition(s,owner.input,'player');
-   for(const defender of this.ordered(actors).filter(a=>a.id!==this.ownerId)){this.focus(defender);if(trySteal(s,defender.input))this.commit(defender);}
+   for(const defender of this.ordered(actors).filter(a=>a.id!==this.ownerId)){this.focus(defender);if(trySteal(s,defender.input)){emitGameEvent(s,'catch',s.ball,1,defender.id);this.commit(defender);}}
   }else{
    s.flight+=dt;
    advanceBall(s,dt,(prev,next,floor,collided,t0,t1)=>{
@@ -100,7 +100,7 @@ export class OnlineWorld{
     }
    },CFG.gravity,(kind,p,strength)=>impactEvent(s,kind,p,strength));
    if(!this.ownerId){if(s.flightKind==='shot'&&s.flight>=PHYSICS.maxFlight&&!s.resolved)this.outcome(false);if(s.flightKind==='pass'&&s.flight>=PRACTICE.passFlightSeconds)makeLoose(s);if(!s.flightKind)s.looseAge+=dt;
-    if(actors.length&&(Math.abs(s.ball.x)>PHYSICS.outDistance||Math.abs(s.ball.z)>PHYSICS.outDistance||s.looseAge>PRACTICE.recoverySeconds)){if(s.flightKind==='shot'&&!s.resolved)this.outcome(false);this.acquire(this.ordered(actors)[0],s.ball);this.revision++;}
+    if(actors.length&&(Math.abs(s.ball.x)>PHYSICS.outDistance||Math.abs(s.ball.z)>PHYSICS.outDistance||s.looseAge>PRACTICE.recoverySeconds)){if(s.flightKind==='shot'&&!s.resolved)this.outcome(false);this.acquire(this.ordered(actors)[0],s.ball,false);this.revision++;}
    }
   }
   for(const a of actors){this.focus(a);finishDefense(s);this.commit(a);}
