@@ -73,7 +73,15 @@ export function createCharacter(scene:Scene,options:{name:string;firstPerson:boo
     for(const arm of arms) {
       const palm=toLocal(arm.side===1?pose.rightHand:pose.leftHand),s=new Vector3(arm.side*CHARACTER.shoulderX,CHARACTER.shoulderY,0);
       const flex=arm.side===1?pose.rightWrist:pose.leftWrist;
-      const handAxis=palm.subtract(s);handAxis.y-=flex*.09;handAxis.z+=flex*.04;handAxis.normalize();
+      const handAxis=palm.subtract(s);
+      if(arm.side===1&&pose.shooting>0){
+        // In the yaw-only body frame +X is right, +Z is forward.
+        // Negative angles cock the raised hand back; positive angles snap it forward.
+        // Offset the wrist target from this axis so the palm socket stays at the core target.
+        handAxis.normalize();const y=handAxis.y,z=handAxis.z;
+        handAxis.y=y*Math.cos(flex)-z*Math.sin(flex);
+        handAxis.z=y*Math.sin(flex)+z*Math.cos(flex);
+      }else{handAxis.y-=flex*.09;handAxis.z+=flex*.04;handAxis.normalize();}
       const wristTarget=palm.subtract(handAxis.scale(CHARACTER.handLength/2));
       const delta=wristTarget.subtract(s),distance=Math.max(.001,Math.min(CHARACTER.upperArm+CHARACTER.forearm-.0001,delta.length())),dir=delta.normalize();
       const hint=pose.shooting>.1?new Vector3(arm.side*.02,-1,.25):new Vector3(arm.side*.12,-1,-.35),bend=hint.subtract(dir.scale(Vector3.Dot(hint,dir)));

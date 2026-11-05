@@ -76,6 +76,8 @@ export const SHOT_FORM = {
   groundHipBend: .28, shoulderLift: .035, groundedHeight: 0,
   followHoldSeconds: .28, followReturnSeconds: .24, followReachSeconds: .08,
   followHandUp: .60, followHandForward: .18,
+  followGuideSide: -.18, followGuideUp: .55, followGuideForward: .23,
+  wristChargeAngle: -.75, wristReleaseAngle: 1.05,
 };
 
 // Endpoints reuse DRIBBLE.side/forward and idle/move/sprintHeight to avoid seams.
