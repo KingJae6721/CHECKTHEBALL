@@ -1,3 +1,4 @@
+import {matchPlayable,type MatchIntent,type RoomMode} from '../../../packages/game-core/src/match';
 import {Samples} from '../../../packages/protocol/src/diagnostics';
 import {MovementPrediction} from './movementPrediction';
 import {Client,type Room} from '@colyseus/sdk';
@@ -47,11 +48,16 @@ export class OnlineSession{
  private error=(_code:number,message?:string)=>{this.status=message??'연결 오류';};
  get latest(){return this.frames.at(-1);}
  get self(){return this.prediction.actor;}
+ get canPlay(){return matchPlayable(this.latest?.match);}
+ get matchRemainingMs(){const m=this.latest?.match,end=m?.countdownEnd??m?.setupEnd;return end==null?0:Math.max(0,end-(performance.now()+(this.clockOffset??0)));}
+ matchIntent(intent:MatchIntent['intent']){const m=this.latest?.match;if(m&&this.connected&&!this.closed)this.room.send('matchIntent',{matchId:m.id,intent});}
  get ownsBall(){return this.latest?.ownerId===this.room.sessionId;}
  receive=(state:{frame:string})=>{
   if(!state.frame||this.closed)return;const frame=JSON.parse(state.frame) as WorldSnapshot,last=this.latest;
   if(frame.protocolVersion!==NETWORK.protocolVersion){this.connected=false;this.status=`통신 규약 불일치: 웹 v${NETWORK.protocolVersion} / 서버 ${frame.protocolVersion===undefined?'버전 없음(이전 서버)':'v'+frame.protocolVersion}. 같은 포트의 이전 게임 서버 또는 오래된 dist 실행 여부를 확인하세요.`;if(this.room.connection?.isOpen)void this.room.leave();return;}
   if(last&&(frame.tick<=last.tick||frame.time<=last.time)){this.droppedSnapshots++;return;}
+  const boundary=!!frame.match&&(!last?.match||frame.match.epoch!==last.match.epoch);
+  if(boundary){this.frames.length=0;this.renderTime=-Infinity;this.renderBase=-1;this.renderFrame=undefined;this.pendingJump=false;this.phaseOverride=undefined;this.barrier=0;this.lastPump=0;this.accumulator=0;}
   const now=performance.now(),offset=frame.time-now;if(this.lastReceiveAt)this.snapshotGaps.add(now-this.lastReceiveAt);this.lastReceiveAt=now;
   this.clockOffset=this.clockOffset===undefined||Math.abs(offset-this.clockOffset)>NETWORK.maxPredictionGapMs?offset:this.clockOffset+Math.max(-2,Math.min(2,offset-this.clockOffset))*.1;
   this.frames.push(frame);if(this.frames.length>40)this.frames.shift();
@@ -60,20 +66,20 @@ export class OnlineSession{
   const waiting=this.barrier>0,finished=waiting&&self.processedActionSeq>=this.barrier;
   if(finished){this.barrier=0;this.lastPump=0;this.accumulator=0;}
   if(this.phaseOverride&&self.processedActionSeq>=this.phaseOverride.seq)this.phaseOverride=undefined;
-  this.prediction.accept(self,frame.players.find(a=>a.id!==self.id),waiting||!this.prediction.actor);const span=now-this.rateAt;if(!this.rateAt||span>=1000){if(this.rateAt)this.rates={generatedPerSecond:(this.generated-this.rateGenerated)*1000/span,receivedPerSecond:(self.net.received-this.rateReceived)*1000/span,consumedPerSecond:(self.net.consumed-this.rateConsumed)*1000/span};this.rateAt=now;this.rateGenerated=this.generated;this.rateConsumed=self.net.consumed;this.rateReceived=self.net.received;}this.record('snapshot');
+  this.prediction.accept(self,frame.players.find(a=>a.id!==self.id),boundary||waiting||!this.prediction.actor);const span=now-this.rateAt;if(!this.rateAt||span>=1000){if(this.rateAt)this.rates={generatedPerSecond:(this.generated-this.rateGenerated)*1000/span,receivedPerSecond:(self.net.received-this.rateReceived)*1000/span,consumedPerSecond:(self.net.consumed-this.rateConsumed)*1000/span};this.rateAt=now;this.rateGenerated=this.generated;this.rateConsumed=self.net.consumed;this.rateReceived=self.net.received;}this.record('snapshot');
  };
  private write(input:Input,actions:Action[],moveSeq?:number){
-  const seq=++this.seq;this.room.send('input',{seq,...(moveSeq===undefined?{}:{moveSeq}),x:input.x,z:input.z,sprint:input.sprint,yaw:Math.atan2(Math.sin(input.yaw),Math.cos(input.yaw)),pitch:input.pitch,actions});return seq;
+  const seq=++this.seq;this.room.send('input',{seq,...(this.latest?.match?{matchId:this.latest.match.id,epoch:this.latest.match.epoch}:{}),...(moveSeq===undefined?{}:{moveSeq}),x:input.x,z:input.z,sprint:input.sprint,yaw:Math.atan2(Math.sin(input.yaw),Math.cos(input.yaw)),pitch:input.pitch,actions});return seq;
  }
  send(input:Input,actions:Action[]=[],reason='EXPLICIT_CANCEL'){
-  if(!this.connected||this.closed)return;
+  if(!this.connected||this.closed||!this.canPlay)return;
   const other=actions.filter(a=>a!=='jump');if(actions.includes('jump'))this.pendingJump=true;if(!other.length)return;
   const seq=this.write(input,other);
   if(this.ownsBall&&(other.includes('shotDown')||other.includes('passDown')))this.phaseOverride={slow:other.includes('shotDown'),seq};
   if(other.includes('cancel')||other.includes('movementSync')){const cancel=other.includes('cancel');this.cancelCounts[reason]=(this.cancelCounts[reason]??0)+1;this.record(cancel?'cancel':'movementSync',{reason,seq});this.barrier=seq;this.pendingJump=false;if(cancel)this.phaseOverride={slow:false,seq};this.prediction.pending.length=0;this.prediction.clearOffset();this.accumulator=0;this.lastPump=0;this.prediction.writer='client:cancel-barrier';}
  }
  advance(now:number,input:Input){
-  if(!this.connected||!this.self||this.closed)return;this.ping(now);
+  if(!this.connected||!this.self||this.closed)return;this.ping(now);if(!this.canPlay){this.lastPump=0;this.accumulator=0;this.pendingJump=false;return;}
   if(!this.lastPump){this.lastPump=now;return;}const elapsed=now-this.lastPump;this.lastPump=now;
   if(this.barrier){this.accumulator=0;return;}
   const step=1000/NETWORK.tickRate;
@@ -123,8 +129,8 @@ export class OnlineSession{
  resetDiagnostics(){this.rtts.clear();this.jitter.clear();this.snapshotGaps.clear();this.underflowCount=0;this.underflowFrames=0;this.pingTimeouts=0;this.trace.length=0;this.prediction.corrections=0;this.prediction.totalCorrection=0;this.prediction.maxCorrection=0;this.prediction.lastCorrection=0;this.prediction.resets=0;this.droppedSnapshots=0;}
  close(){if(this.closed)return;this.closed=true;this.connected=false;this.removePong?.();this.pings.clear();this.room.onStateChange.remove(this.receive);this.room.onDrop.remove(this.drop);this.room.onLeave.remove(this.drop);this.room.onError.remove(this.error);this.prediction.pending.length=0;if(this.room.connection?.isOpen)void this.room.leave();}
 }
-export async function connectOnline(roomId?:string,nickname?:string){const address=process.env.NEXT_PUBLIC_GAME_SERVER_URL;if(!address)throw Error('NEXT_PUBLIC_GAME_SERVER_URL을 설정하고 웹 서버를 다시 시작하세요.');if(!/^wss?:\/\//.test(address))throw Error('게임 서버 주소는 ws:// 또는 wss://로 설정하세요.');
- const client=new Client(address);const room=roomId?await client.joinById(roomId.trim(),{nickname}):await client.create('basketball',{nickname});return new OnlineSession(room);
+export async function connectOnline(roomId?:string,nickname?:string,mode:RoomMode='practice'){const address=process.env.NEXT_PUBLIC_GAME_SERVER_URL;if(!address)throw Error('NEXT_PUBLIC_GAME_SERVER_URL을 설정하고 웹 서버를 다시 시작하세요.');if(!/^wss?:\/\//.test(address))throw Error('게임 서버 주소는 ws:// 또는 wss://로 설정하세요.');
+ const client=new Client(address);const room=roomId?await client.joinById(roomId.trim(),{nickname}):await client.create('basketball',{nickname,mode});return new OnlineSession(room);
 }
 export function actorView(frame:WorldSnapshot,actor:ActorSnapshot,s:State=createState()):State{
  s.networked=true;s.screen=actor.screen;s.player=actor.position;s.vy=actor.vy;s.playerMotion=actor.motion;s.defense=actor.defense;s.locomotion=actor.locomotion;s.owner=frame.ownerId===actor.id?'player':frame.ownerId?'dummy':'none';s.phase=s.owner==='player'?actor.phase:frame.flightKind?'IN_FLIGHT':'RESOLVING';s.charge=actor.charge;s.passCharge=actor.passCharge;s.ball=frame.ball;s.ballVelocity=frame.velocity;s.flightKind=frame.flightKind;s.score=frame.score;s.attempts=frame.attempts;s.made=frame.made;s.resolved=frame.resolved;s.shotId=frame.shotId;s.message=frame.message;s.tick=frame.tick;return s;

@@ -14,8 +14,8 @@ test('nearby low slow free ball is picked up and attached at normal held positio
  const s=loose();stepGame(s,zeroInput());assert.equal(s.owner,'player');assert.equal(s.phase,'HELD');assert.deepEqual(s.ballVelocity,{x:0,y:0,z:0});const caught=s.ball.y;for(let n=0;n<12;n++)stepGame(s,zeroInput());assert.ok(s.ball.y>caught);assert.equal(s.dummyHold,0);
 });
 test('pickup enforces independent distance, height and speed thresholds',()=>{
- const far=loose();far.ball.x+=ACQUISITION.ground.halfWidth+.01;assert.equal(tryPickup(far),false);
- const high=loose();high.ball.y=COURT.floorY+ACQUISITION.ground.maxHeight+.01;assert.equal(tryPickup(high),false);
+ const far=loose();far.ball.x+=ACQUISITION.ground.halfWidth+COURT.ballRadius+.01;assert.equal(tryPickup(far),false);
+ const high=loose();high.ball.y=COURT.floorY+ACQUISITION.ground.maxHeight+COURT.ballRadius+.01;assert.equal(tryPickup(high),false);
  const fast=loose();fast.ballVelocity.x=ACQUISITION.ground.maxSpeed+.01;assert.equal(tryPickup(fast),false);
  const jumping=loose();jumping.player.y=.5;assert.equal(tryPickup(jumping),false);
 });

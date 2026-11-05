@@ -82,7 +82,7 @@ test('made shot continues physics and cannot score twice before return',()=>{
  s.ball={x:0,y:3.2,z:5.7};s.ballVelocity={x:0,y:-8,z:0};for(let i=0;i<3;i++)stepGame(s,zeroInput());assert.equal(s.made,1);assert.equal(s.score,2);
 });
 test('first floor miss stays free for collection and can shoot again after pickup',()=>{
- const s=createState();s.phase='IN_FLIGHT';s.owner='none';s.flightKind='shot';s.ball={x:0,y:ground+.01,z:0};s.ballVelocity={x:0,y:-4,z:0};stepGame(s,zeroInput());
+ const s=createState();s.phase='IN_FLIGHT';s.owner='none';s.flightKind='shot';s.ball={x:3,y:ground+.01,z:0};s.ballVelocity={x:0,y:-4,z:0};stepGame(s,zeroInput());
  assert.equal(s.resolved,true);assert.equal(s.phase,'RESOLVING');assert.ok(s.ballVelocity.y>0);const y=s.ball.y;stepGame(s,zeroInput());assert.ok(s.ball.y>y);
  for(let i=0;i<30;i++)stepGame(s,zeroInput());assert.equal(s.phase,'RESOLVING');
  for(let i=0;i<200;i++)stepGame(s,zeroInput());assert.equal(s.owner,'none');assert.equal(s.phase,'RESOLVING');s.ball={x:s.player.x,y:ground,z:s.player.z};s.ballVelocity={x:0,y:0,z:0};stepGame(s,zeroInput());assert.equal(s.phase,'HELD');assert.ok(startCharge(s));s.charge=CFG.idealCharge;assert.ok(releaseShot(s,zeroInput()));assert.equal(s.resolved,false);assert.equal(s.phase,'IN_FLIGHT');
