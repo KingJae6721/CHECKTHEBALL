@@ -1,5 +1,6 @@
+import {createScreen,advanceScreen,type ScreenState} from './screen';
 import {createEventLog,emitGameEvent,impactEvent,type EventLog} from './gameEvents';
-import {moveBody,fixedBodies} from './bodies';
+import {moveBody,fixedBodies,isBodyCollisionPractice} from './bodies';
 import {createLocomotion,advanceLocomotion,type Locomotion} from './locomotion';
 import {assistedShotVelocity} from './shot';
 import {createDefense, advanceDefense, finishDefense, trySteal, tryBlock, type DefenseState} from './defense';
@@ -15,9 +16,9 @@ export type Owner = 'player' | 'dummy' | 'none';
 export type FlightKind = 'shot' | 'pass' | null;
 export type Phase = 'HELD' | 'CHARGING' | 'PASS_CHARGING' | 'IN_FLIGHT' | 'RESOLVING';
 export type Input = { x: number; z: number; sprint: boolean; jump: boolean; yaw: number; pitch: number };
-export type State = { events:EventLog; networked?:boolean; locomotion:Locomotion; defense:DefenseState; practice:PracticeState; playerMotion:BallMotion; dummyMotion:BallMotion; passCharge: number; lastPlayerPass: PlayerPassLaunch | null; shotTouched: boolean; shotExited: boolean; acquisitionEvent: AcquisitionEvent | null; acquisitionBlock: AcquisitionBlock; owner: Owner; flightKind: FlightKind; passFrom: Owner; releaseAge: number; looseAge: number; dummyHold: number; player: Vec; vy: number; ball: Vec; ballVelocity: Vec; phase: Phase; charge: number; score: number; attempts: number; made: number; shotId: number; resolved: boolean; shotPoints: number; flight: number; message: string; lastTiming: number | null; tick: number };
+export type State = { screen:ScreenState; events:EventLog; networked?:boolean; locomotion:Locomotion; defense:DefenseState; practice:PracticeState; playerMotion:BallMotion; dummyMotion:BallMotion; passCharge: number; lastPlayerPass: PlayerPassLaunch | null; shotTouched: boolean; shotExited: boolean; acquisitionEvent: AcquisitionEvent | null; acquisitionBlock: AcquisitionBlock; owner: Owner; flightKind: FlightKind; passFrom: Owner; releaseAge: number; looseAge: number; dummyHold: number; player: Vec; vy: number; ball: Vec; ballVelocity: Vec; phase: Phase; charge: number; score: number; attempts: number; made: number; shotId: number; resolved: boolean; shotPoints: number; flight: number; message: string; lastTiming: number | null; tick: number };
 export const zeroInput = (): Input => ({ x: 0, z: 0, sprint: false, jump: false, yaw: 0, pitch: 0 });
-export function createState(): State { return { events:createEventLog(),locomotion:createLocomotion(),defense:createDefense(),practice:createPractice(),playerMotion:createMotion('DRIBBLE'), dummyMotion:createMotion(), passCharge: 0, lastPlayerPass: null, shotTouched: false, shotExited: false, acquisitionEvent: null, acquisitionBlock: 'OWNED_BY_PLAYER', owner: 'player', flightKind: null, passFrom: 'none', releaseAge: 0, looseAge: 0, dummyHold: 0, player: { x: 0, y: 0, z: -1.5 }, vy: 0, ball: { x: DRIBBLE.side, y: DRIBBLE.idleHeight, z: -1.5+DRIBBLE.forward }, ballVelocity: { x: 0, y: 0, z: 0 }, phase: 'HELD', charge: 0, score: 0, attempts: 0, made: 0, shotId: 0, resolved: false, shotPoints: 1, flight: 0, message: '라인에 서서 첫 슛을 던져보세요', lastTiming: null, tick: 0 }; }
+export function createState(): State { return { screen:createScreen(),events:createEventLog(),locomotion:createLocomotion(),defense:createDefense(),practice:createPractice(),playerMotion:createMotion('DRIBBLE'), dummyMotion:createMotion(), passCharge: 0, lastPlayerPass: null, shotTouched: false, shotExited: false, acquisitionEvent: null, acquisitionBlock: 'OWNED_BY_PLAYER', owner: 'player', flightKind: null, passFrom: 'none', releaseAge: 0, looseAge: 0, dummyHold: 0, player: { x: 0, y: 0, z: -1.5 }, vy: 0, ball: { x: DRIBBLE.side, y: DRIBBLE.idleHeight, z: -1.5+DRIBBLE.forward }, ballVelocity: { x: 0, y: 0, z: 0 }, phase: 'HELD', charge: 0, score: 0, attempts: 0, made: 0, shotId: 0, resolved: false, shotPoints: 1, flight: 0, message: '라인에 서서 첫 슛을 던져보세요', lastTiming: null, tick: 0 }; }
 export function startCharge(s: State) { if (s.owner !== 'player' || (s.phase !== 'HELD'&&s.phase!=='PASS_CHARGING') || !!s.defense.kind || !!s.playerMotion.pending) return false; s.phase = 'CHARGING'; s.charge = 0; s.passCharge=0; beginGather(s.playerMotion,s.ball); return true; }
 export function cancelCharge(s: State) { if (s.phase === 'CHARGING') { s.phase = s.owner==='none'?'RESOLVING':'HELD'; s.charge = 0; cancelMotion(s.playerMotion,s.ball,s.owner==='player'); } }
 export function pointsAt(p: Vec) { return Math.hypot(p.x - CFG.rim.x, p.z - CFG.rim.z) > CFG.arc ? 2 : 1; }
@@ -36,6 +37,8 @@ function fireShot(s: State, input: Input, charge:number) {
 export function resolve(s: State, made: boolean,actorId='player') { if (s.resolved) return; s.resolved = true; if (made) { emitGameEvent(s,'net',COURT.rim,1,actorId,`shot:${s.shotId}`); s.score += s.shotPoints; s.made++; s.message = `SWISH · +${s.shotPoints}`; } else s.message = '아쉽네요. 조준과 릴리스를 조절해보세요'; makeLoose(s); }
 export function stepGame(s: State, input: Input, dt = CFG.dt) {
   s.tick++;
+  if(s.owner==='player'||s.defense.kind)s.screen.active=false;
+  advanceScreen(s.screen,input.x!==0||input.z!==0||input.jump,s.player.y>0||s.vy>0,dt);
   s.releaseAge += dt;
   s.acquisitionBlock=acquisitionEligibility(s);
   if(s.owner!=='player')updateUnownedMotion(s.playerMotion,dt);
@@ -45,7 +48,7 @@ export function stepGame(s: State, input: Input, dt = CFG.dt) {
   const z = Number.isFinite(input.z) ? Math.max(-1, Math.min(1, input.z)) : 0;
   const length = Math.max(1, Math.hypot(x, z));
   const speed = (input.sprint ? CFG.sprint : CFG.speed) * (s.phase === 'CHARGING' ? MOVEMENT.chargeScale : 1) * (s.player.y > 0 ? MOVEMENT.airScale : 1);
-  const movement=moveBody(s.player,{x:(x*Math.cos(input.yaw)+z*Math.sin(input.yaw))/length*speed*dt,z:(-x*Math.sin(input.yaw)+z*Math.cos(input.yaw))/length*speed*dt},fixedBodies(s.practice.mode));
+  const movement=moveBody(s.player,{x:(x*Math.cos(input.yaw)+z*Math.sin(input.yaw))/length*speed*dt,z:(-x*Math.sin(input.yaw)+z*Math.cos(input.yaw))/length*speed*dt},fixedBodies(s.practice.mode,s.owner==='dummy'));
   const actual=movement.recovered?{x:0,z:0}:{x:movement.position.x-s.player.x,z:movement.position.z-s.player.z};
   s.player.x=movement.position.x;s.player.z=movement.position.z;s.locomotion.collision=movement;
   if (input.jump && s.player.y === 0) s.vy = CFG.jump;
@@ -105,6 +108,7 @@ export function stepGame(s: State, input: Input, dt = CFG.dt) {
 
 export function makeLoose(s: State) { s.owner='none'; s.flightKind=null; s.phase='RESOLVING'; s.charge=0; s.looseAge=0; s.dummyHold=0; }
 export function giveBall(s: State, owner: 'player'|'dummy',point?:Vec) {
+  if(owner==='player')s.screen.active=false;
   const caught=s.owner!==owner&&!!point;
   cancelAllCharges(s);cancelMotion(s.dummyMotion,s.ball,false); s.owner=owner; s.flightKind=null; s.phase='HELD'; s.charge=0;
   s.ballVelocity={x:0,y:0,z:0}; s.looseAge=0; s.flight=0;
@@ -113,7 +117,7 @@ export function giveBall(s: State, owner: 'player'|'dummy',point?:Vec) {
   const motion=owner==='player'?s.playerMotion:s.dummyMotion,hand=motion.currentDribbleHand,yaw=owner==='dummy'?dummyYaw(s):motion.dribbleYaw;Object.assign(motion,createMotion(point?'CATCH':'DRIBBLE'));motion.currentDribbleHand=hand;motion.dribbleYaw=yaw;
   if(point){s.ball={...point};beginCatch(motion,point);if(caught&&!s.networked)emitGameEvent(s,'catch',point,1,owner);}
 }
-export function dummyYaw(s: State) { return Math.atan2(s.player.x-DUMMY.position.x,s.player.z-DUMMY.position.z); }
+export function dummyYaw(s: State) { return isBodyCollisionPractice(s.practice.mode)?Math.PI:Math.atan2(s.player.x-DUMMY.position.x,s.player.z-DUMMY.position.z); }
 export function dummyCatchPosition(s: State): Vec {
   const yaw=dummyYaw(s);
   return {x:DUMMY.position.x+Math.sin(yaw)*DUMMY.catchForward,y:DUMMY.position.y+DUMMY.catchY,z:DUMMY.position.z+Math.cos(yaw)*DUMMY.catchForward};
@@ -180,7 +184,7 @@ export function catchPass(s: State,a: Vec,b: Vec,input:Input=zeroInput()) {
     const receiverInput=owner==='dummy'?{...input,yaw:dummyYaw(s)}:input;
     const p=passCatchPoint(s,receiverInput,a,b,owner==='dummy'?DUMMY.position:s.player);
     if(!p)continue;
-    giveBall(s,owner,p);s.message=owner==='dummy'?'더미 캐치 · 반환 준비':'캐치 · 우클로 다시 패스';return true;
+    giveBall(s,owner,p);s.message=owner==='dummy'?(s.practice.mode==='PASS'?'더미 캐치 · 반환 준비':'더미 캐치 · 드리블'):'캐치 · 우클로 다시 패스';return true;
   }
   return false;
 }

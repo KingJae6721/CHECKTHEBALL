@@ -1,5 +1,7 @@
+import {isBodyCollisionPractice} from './bodies';
 import {defenseHand} from './defense';
-import { CHARACTER, COURT, DRIBBLE, DUMMY, PLAYER, SHOT_FORM, CROSSOVER, DEFENSE, GAIT } from './court';
+import type {ScreenState} from './screen';
+import { CHARACTER, COURT, DRIBBLE, DUMMY, PLAYER, SHOT_FORM, CROSSOVER, DEFENSE, GAIT, SCREEN } from './court';
 import { playerPassLaunch, passDirection } from './pass';
 import type { Input, State, Vec } from './simulation';
 export type BallAction = 'IDLE'|'DRIBBLE'|'CROSSOVER'|'GATHER'|'SHOT_CHARGE'|'PASS_CHARGE'|'RELEASE'|'CATCH';
@@ -11,7 +13,7 @@ const clamp=(x:number)=>Math.max(0,Math.min(1,x));
 const smooth=(x:number)=>{const t=clamp(x);return t*t*(3-2*t);};
 const mix=(a:Vec,b:Vec,t:number):Vec=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:a.z+(b.z-a.z)*t});
 export function createMotion(action:BallAction='IDLE'):BallMotion {return {currentDribbleHand:'right',crossover:null,dribbleYaw:0,action,elapsed:0,clock:0,phase:0,rate:1/DRIBBLE.idlePeriod,height:DRIBBLE.idleHeight,locomotion:'IDLE',from:{x:0,y:0,z:0},releasePoint:{x:0,y:0,z:0},pending:null,fired:false,lastKind:null};}
-export function actorYaw(s:State,input:Input,owner:'player'|'dummy') {return owner==='player'?input.yaw:s.practice.mode==='BLOCK'?Math.atan2(COURT.rim.x-DUMMY.position.x,COURT.rim.z-DUMMY.position.z):Math.atan2(s.player.x-DUMMY.position.x,s.player.z-DUMMY.position.z);}
+export function actorYaw(s:State,input:Input,owner:'player'|'dummy') {return owner==='player'?input.yaw:isBodyCollisionPractice(s.practice.mode)?Math.PI:s.practice.mode==='BLOCK'?Math.atan2(COURT.rim.x-DUMMY.position.x,COURT.rim.z-DUMMY.position.z):Math.atan2(s.player.x-DUMMY.position.x,s.player.z-DUMMY.position.z);}
 export function actorPosition(s:State,owner:'player'|'dummy'):Vec {return owner==='player'?s.player:DUMMY.position;}
 function localPoint(base:Vec,yaw:number,x:number,y:number,z:number):Vec{return {x:base.x+Math.cos(yaw)*x+Math.sin(yaw)*z,y:base.y+y,z:base.z-Math.sin(yaw)*x+Math.cos(yaw)*z};}
 export function dribblePoint(base:Vec,yaw:number,phase:number,height=DRIBBLE.idleHeight,hand:DribbleHand='right'):Vec {
@@ -126,8 +128,9 @@ export function advanceControlledMotion(s:State,input:Input,owner:'player'|'dumm
   s.ball=controlledPosition(s,input,owner);return false;
 }
 // Core pose sockets are display inputs, never read back from Babylon joints.
-export function characterPose(s:State,input:Input,owner:'player'|'dummy',fixedBase?:Vec) {
-  const m=owner==='player'?s.playerMotion:s.dummyMotion,actorBase=fixedBase??actorPosition(s,owner),base={...actorBase,y:actorBase.y+(owner==='player'?COURT.floorY:0)},yaw=fixedBase?Math.atan2(s.player.x-fixedBase.x,s.player.z-fixedBase.z):(m.action==='DRIBBLE'||m.action==='CROSSOVER'||m.action==='CATCH')?m.dribbleYaw:actorYaw(s,input,owner),owned=!fixedBase&&s.owner===owner;
+export function characterPose(s:State,input:Input,owner:'player'|'dummy',fixedBase?:Vec&{screen?:ScreenState}) {
+  const poseScreen=fixedBase?.screen??(owner==='player'&&!fixedBase&&s.owner!=='player'?s.screen:undefined),screening=poseScreen?.blend??0;
+  const m=owner==='player'?s.playerMotion:s.dummyMotion,actorBase=fixedBase??actorPosition(s,owner),base={...actorBase,y:actorBase.y+(owner==='player'?COURT.floorY:0)},yaw=screening>.001?poseScreen!.yaw:fixedBase?Math.atan2(s.player.x-fixedBase.x,s.player.z-fixedBase.z):(m.action==='DRIBBLE'||m.action==='CROSSOVER'||m.action==='CATCH')?m.dribbleYaw:actorYaw(s,input,owner),owned=!fixedBase&&s.owner===owner;
   // Aim pitch orients hands around the ball; the torso/shoulders stay upright.
   const aimBlend=m.action==='GATHER'?smooth(m.elapsed/DRIBBLE.gatherSeconds):(m.action==='SHOT_CHARGE'||m.action==='PASS_CHARGE'||(m.action==='RELEASE'&&!m.fired))?1:(m.action==='RELEASE'&&m.fired)?1-followFade(m):0;
   const pitch=owner==='player'&&!s.defense.kind?input.pitch*aimBlend:0;
@@ -147,9 +150,9 @@ export function characterPose(s:State,input:Input,owner:'player'|'dummy',fixedBa
   const pelvisSway=locomotion?Math.sin(gait!.phase)*GAIT.pelvisSway*gait!.blend:0;
   const legBend=(shooting*SHOT_FORM.groundHipBend+(crossing?CROSSOVER.kneeBend*Math.sin(Math.PI*crossProgress):0))*(actorBase.y<=(owner==='dummy'?COURT.floorY:SHOT_FORM.groundedHeight)?1:0);
   const defenseBend=defending*DEFENSE.stanceBend*(base.y<=COURT.floorY+.001?1:0);
-  const totalBend=legBend+defenseBend;
+  const totalBend=legBend+defenseBend*(1-screening)+SCREEN.kneeBend*screening,legSpread=SCREEN.hipSpread*screening;
   const strideAngle=locomotion?(GAIT.walkAngle+(GAIT.runAngle-GAIT.walkAngle)*gait!.run)*gait!.blend:0;
-  const pelvisDrop=(CHARACTER.upperLeg+CHARACTER.lowerLeg)*(1-Math.cos(totalBend))+(locomotion?(CHARACTER.upperLeg+CHARACTER.lowerLeg)*(1-Math.cos(strideAngle))+GAIT.pelvisBob*(1-Math.cos(gait!.phase*2))*gait!.blend:0);
+  const pelvisDrop=(CHARACTER.upperLeg+CHARACTER.lowerLeg)*(1-Math.cos(totalBend)*Math.cos(legSpread))+(locomotion?(CHARACTER.upperLeg+CHARACTER.lowerLeg)*(1-Math.cos(strideAngle))+GAIT.pelvisBob*(1-Math.cos(gait!.phase*2))*gait!.blend:0);
   const block=DEFENSE.block,blockExtension=defenseAction==='BLOCK'?Math.max(0,Math.min(1,s.defense.elapsed/block.prepare,(block.prepare+block.active+block.recover-s.defense.elapsed)/block.recover)):0;
   const pelvisBack=(CHARACTER.upperLeg-CHARACTER.lowerLeg)*Math.sin(totalBend),shoulderLift=shooting*SHOT_FORM.shoulderLift+block.shoulderLift*blockExtension;
   const up={x:Math.sin(yaw)*Math.sin(pitch),y:Math.cos(pitch),z:Math.cos(yaw)*Math.sin(pitch)},forward=passDirection(yaw,pitch);
@@ -210,12 +213,16 @@ export function characterPose(s:State,input:Input,owner:'player'|'dummy',fixedBa
     if(defenseAction){right=defenseHand(actorBase,yaw,defenseAction,s.defense.elapsed);if(defenseAction==='BLOCK'){const side=(right.x-base.x)*Math.cos(yaw)-(right.z-base.z)*Math.sin(yaw);left={x:right.x-2*Math.cos(yaw)*side,y:right.y,z:right.z+2*Math.sin(yaw)*side};}}
   }
   if(m.action!=='DRIBBLE'&&!crossing&&!(isShot&&shooting>0)){rightWrist=leftWrist=wrist;}
+  if(screening>0){
+    right=mix(right,localPoint(base,yaw,SCREEN.handSide,SCREEN.handHeight,SCREEN.handForward),screening);
+    left=mix(left,localPoint(base,yaw,-SCREEN.handSide,SCREEN.handHeight+.025,SCREEN.handForward+.015),screening);
+  }
   const reachable=(p:Vec,side:number)=>{
     const shoulder=localPoint(base,yaw,side*CHARACTER.shoulderX+torsoSide,CHARACTER.shoulderY-pelvisDrop+shoulderLift,-pelvisBack);
     const dx=p.x-shoulder.x,dy=p.y-shoulder.y,dz=p.z-shoulder.z;
     const length=Math.hypot(dx,dy,dz),reach=CHARACTER.upperArm+CHARACTER.forearm+CHARACTER.handLength/2-.005,scale=Math.min(1,reach/Math.max(length,1e-8));
     return {x:shoulder.x+dx*scale,y:shoulder.y+dy*scale,z:shoulder.z+dz*scale};
   };
-  return {position:{...base},attacking:owned||m.action==='RELEASE',yaw,pitch,shooting,torsoSide,legBend:totalBend,step,stepSide,stepForward,pelvisSway,gaitPhase:gait?.phase??0,gaitBlend:locomotion?gait!.blend:0,airborne:owner==='player'&&s.player.y>0,pelvisDrop,pelvisBack,shoulderLift,rightHand:reachable(right,1),leftHand:reachable(left,-1),wrist,rightWrist,leftWrist,dribbleHand:m.currentDribbleHand,crossoverStage:m.crossover?.stage??'NONE',crossoverProgress:crossProgress,action:m.action,locomotion:m.locomotion,clock:m.clock,ballSocket:owned?{...s.ball}:null};
+  return {position:{...base},attacking:owned||m.action==='RELEASE',yaw,pitch,shooting,screening,legSpread,torsoSide,legBend:totalBend,step,stepSide,stepForward,pelvisSway,gaitPhase:gait?.phase??0,gaitBlend:locomotion?gait!.blend:0,airborne:owner==='player'&&s.player.y>0,pelvisDrop,pelvisBack,shoulderLift,rightHand:reachable(right,1),leftHand:reachable(left,-1),wrist,rightWrist,leftWrist,dribbleHand:m.currentDribbleHand,crossoverStage:m.crossover?.stage??'NONE',crossoverProgress:crossProgress,action:m.action,locomotion:m.locomotion,clock:m.clock,ballSocket:owned?{...s.ball}:null};
 }
 export type CharacterPose=ReturnType<typeof characterPose>;

@@ -104,6 +104,7 @@ export class OnlineSession{
    const source=a.players.find(x=>x.id===p.id)!,q=b.players.find(x=>x.id===p.id);if(!q||p.id===this.room.sessionId)continue;
    const teleported=q.lastPositionWriter.includes('safe-reset')&&q.recoveryCount!==source.recoveryCount;if(teleported){Object.assign(p.position,source.position);continue;}
    p.position.x=mix(source.position.x,q.position.x,t);p.position.y=mix(source.position.y,q.position.y,t);p.position.z=mix(source.position.z,q.position.z,t);
+   if(source.screen.active===q.screen.active)p.screen.blend=mix(source.screen.blend,q.screen.blend,t);
    p.vy=mix(source.vy,q.vy,t);p.input.yaw=angle(source.input.yaw,q.input.yaw,t);p.input.pitch=mix(source.input.pitch,q.input.pitch,t);
    if(source.motion.action===q.motion.action){p.motion.elapsed=mix(source.motion.elapsed,q.motion.elapsed,t);p.motion.clock=mix(source.motion.clock,q.motion.clock,t);const d=((q.motion.phase-source.motion.phase+1.5)%1)-.5;p.motion.phase=(source.motion.phase+d*t+1)%1;p.motion.dribbleYaw=angle(source.motion.dribbleYaw,q.motion.dribbleYaw,t);if(p.motion.crossover&&source.motion.crossover&&q.motion.crossover&&source.motion.crossover.from===q.motion.crossover.from)p.motion.crossover.elapsed=mix(source.motion.crossover.elapsed,q.motion.crossover.elapsed,t);}
    if(source.defense.kind===q.defense.kind)p.defense.elapsed=mix(source.defense.elapsed,q.defense.elapsed,t);
@@ -126,5 +127,5 @@ export async function connectOnline(roomId?:string,nickname?:string){const addre
  const client=new Client(address);const room=roomId?await client.joinById(roomId.trim(),{nickname}):await client.create('basketball',{nickname});return new OnlineSession(room);
 }
 export function actorView(frame:WorldSnapshot,actor:ActorSnapshot,s:State=createState()):State{
- s.networked=true;s.player=actor.position;s.vy=actor.vy;s.playerMotion=actor.motion;s.defense=actor.defense;s.locomotion=actor.locomotion;s.owner=frame.ownerId===actor.id?'player':frame.ownerId?'dummy':'none';s.phase=s.owner==='player'?actor.phase:frame.flightKind?'IN_FLIGHT':'RESOLVING';s.charge=actor.charge;s.passCharge=actor.passCharge;s.ball=frame.ball;s.ballVelocity=frame.velocity;s.flightKind=frame.flightKind;s.score=frame.score;s.attempts=frame.attempts;s.made=frame.made;s.resolved=frame.resolved;s.shotId=frame.shotId;s.message=frame.message;s.tick=frame.tick;return s;
+ s.networked=true;s.screen=actor.screen;s.player=actor.position;s.vy=actor.vy;s.playerMotion=actor.motion;s.defense=actor.defense;s.locomotion=actor.locomotion;s.owner=frame.ownerId===actor.id?'player':frame.ownerId?'dummy':'none';s.phase=s.owner==='player'?actor.phase:frame.flightKind?'IN_FLIGHT':'RESOLVING';s.charge=actor.charge;s.passCharge=actor.passCharge;s.ball=frame.ball;s.ballVelocity=frame.velocity;s.flightKind=frame.flightKind;s.score=frame.score;s.attempts=frame.attempts;s.made=frame.made;s.resolved=frame.resolved;s.shotId=frame.shotId;s.message=frame.message;s.tick=frame.tick;return s;
 }

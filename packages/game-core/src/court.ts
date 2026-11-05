@@ -2,6 +2,11 @@ export const BODY = {
   radius: .42, height: 1.8, tolerance: 1e-6, skin: 1e-5, iterations: 8, recoveryIterations: 16,
   bounds: { minX: -7.1, maxX: 7.1, minZ: -7, maxZ: 6.7 }, safe: { x: 0, z: -6 },
 };
+// Initial screen tuning: lateral footprint only; no contact pushing or fouls.
+export const SCREEN = {
+  sideOffset: .22, hipSpread: .32, kneeBend: .18, response: 12,
+  handSide: .055, handHeight: 1.02, handForward: .24,
+};
 // Metres, seconds. Shared by simulation and rendering.
 export const COURT = {
   ballRadius: .12, floorY: .012,

@@ -1,7 +1,8 @@
+import {createScreen,toggleScreen,type ScreenState} from './screen';
 import {emitGameEvent,impactEvent,type GameEvent} from './gameEvents';
 import {integrateMovement,type MovingActor} from './movement';
 import {BODY,MOVEMENT,PASS,PRACTICE,PHYSICS,DEFENSE,COURT} from './court';
-import {moveBody,recoverBody,validBodyPosition,type XZ} from './bodies';
+import {moveBody,recoverBody,validBodyPosition,bodyShapes,type XZ} from './bodies';
 import {createMotion,advanceControlledMotion,controlledPosition,updateUnownedMotion,cancelMotion,requestCrossover,type BallMotion} from './motion';
 import {createDefense,startDefense,cancelDefense,advanceDefense,finishDefense,trySteal,tryBlock,type DefenseState} from './defense';
 import {createLocomotion,advanceLocomotion,type Locomotion} from './locomotion';
@@ -9,7 +10,7 @@ import {createState,zeroInput,CFG,startCharge,startPassCharge,releaseShot,releas
 import {advanceBall} from './physics';
 import {evaluateAcquisition,outsideAcquisitionVolumes,passCatchPoint} from './acquisition';
 import {NETWORK,validInput,type Action} from '../../protocol/src/index';
-export type OnlineActor={nickname?:string;processedInputSeq:number;processedMoveSeq:number;processedActionSeq:number;receivedMoveSeq:number;sequencedMovement:boolean;moves:{seq:number;moveSeq:number;input:Input;jump:boolean;at:number}[];net:{received:number;consumed:number;discarded:number;queueLength:number;oldestAgeMs:number;timeouts:number;lastCancel:string;lastCancelAt:number;lastReceiveAt:number};recoveryCount:number;lastPositionWriter:string;id:string;slot:number;position:Vec;vy:number;input:Input;motion:BallMotion;defense:DefenseState;locomotion:Locomotion;phase:Phase;charge:number;passCharge:number;ack:number;receivedAt:number;rateAt:number;rateCount:number;queue:{action:Action;input:Input;seq:number}[];buttons:Set<string>;score:number;attempts:number;made:number};
+export type OnlineActor={screen:ScreenState;nickname?:string;processedInputSeq:number;processedMoveSeq:number;processedActionSeq:number;receivedMoveSeq:number;sequencedMovement:boolean;moves:{seq:number;moveSeq:number;input:Input;jump:boolean;at:number}[];net:{received:number;consumed:number;discarded:number;queueLength:number;oldestAgeMs:number;timeouts:number;lastCancel:string;lastCancelAt:number;lastReceiveAt:number};recoveryCount:number;lastPositionWriter:string;id:string;slot:number;position:Vec;vy:number;input:Input;motion:BallMotion;defense:DefenseState;locomotion:Locomotion;phase:Phase;charge:number;passCharge:number;ack:number;receivedAt:number;rateAt:number;rateCount:number;queue:{action:Action;input:Input;seq:number}[];buttons:Set<string>;score:number;attempts:number;made:number};
 export type ActorSnapshot=Omit<OnlineActor,'queue'|'moves'|'buttons'|'rateAt'|'rateCount'|'receivedAt'>;
 export type WorldSnapshot={events?:GameEvent[];serverTiming?:{tickMs:number;maxTickMs:number;callbackGapMs:number;discardedTimeMs:number;supportsPing?:boolean;tickP50Ms?:number|null;tickP95Ms?:number|null;scheduleDelayMs?:number;scheduleP95Ms?:number|null;debtMs?:number};protocolVersion:number;tick:number;time:number;revision:number;ownerId:string|null;shooterId:string|null;passerId:string|null;players:ActorSnapshot[];ball:Vec;velocity:Vec;flightKind:State['flightKind'];resolved:boolean;shotId:number;score:number;attempts:number;made:number;message:string};
 export {movePair} from './bodies';
@@ -17,14 +18,14 @@ export class OnlineWorld{
  readonly state=createState();readonly actors=new Map<string,OnlineActor>();time=0;tick=0;revision=0;ownerId:string|null=null;shooterId:string|null=null;passerId:string|null=null;lastTouchId:string|null=null;everJoined=false;private airborne=new Set<string>();
  possession=0;chargeStartedAt=new Map<string,number>();chargeVersions=new Map<string,number>();pickupLockedUntil=0;ledger=new Map<string,{score:number;attempts:number;made:number}>();
  constructor(){this.state.networked=true;}
- focus(a:OnlineActor){const s=this.state;s.player=a.position;s.vy=a.vy;s.playerMotion=a.motion;s.defense=a.defense;s.locomotion=a.locomotion;s.charge=a.charge;s.passCharge=a.passCharge;
+ focus(a:OnlineActor){const s=this.state;s.screen=a.screen;s.player=a.position;s.vy=a.vy;s.playerMotion=a.motion;s.defense=a.defense;s.locomotion=a.locomotion;s.charge=a.charge;s.passCharge=a.passCharge;
   s.owner=this.ownerId===a.id?'player':this.ownerId?'dummy':'none';s.phase=this.ownerId===a.id?a.phase:s.flightKind?'IN_FLIGHT':'RESOLVING';s.passFrom=this.passerId===a.id?'player':'dummy';s.dummyMotion=this.actors.get(this.ownerId??'')?.motion??createMotion();return s;
  }
  changeOwner(id:string|null){if(id!==null)this.lastTouchId=id;if(this.ownerId===id)return;const old=this.actors.get(this.ownerId??'');if(old){if(!(id===null&&old.motion.action==='RELEASE'&&old.motion.fired))cancelMotion(old.motion,this.state.ball,false);old.phase='HELD';old.charge=0;old.passCharge=0;this.chargeVersions.delete(old.id);this.chargeStartedAt.delete(old.id);}this.ownerId=id;this.possession++;this.revision++;}
  commit(a:OnlineActor){const s=this.state,target=s.owner==='player'?a.id:s.owner==='none'?null:this.ownerId;this.changeOwner(target);a.vy=s.vy;a.phase=this.ownerId===a.id?s.phase:'HELD';a.charge=this.ownerId===a.id?s.charge:0;a.passCharge=this.ownerId===a.id?s.passCharge:0;}
  join(id:string,nickname?:string){if(this.actors.size>=2)throw Error('ROOM_FULL');const slot=[0,1].find(n=>![...this.actors.values()].some(a=>a.slot===n))!;
-  const a:OnlineActor={processedInputSeq:-1,processedMoveSeq:0,processedActionSeq:-1,receivedMoveSeq:0,sequencedMovement:false,moves:[],net:{received:0,consumed:0,discarded:0,queueLength:0,oldestAgeMs:0,timeouts:0,lastCancel:'none',lastCancelAt:0,lastReceiveAt:0},recoveryCount:0,lastPositionWriter:'server:spawn',nickname:nickname?.replace(/[\x00-\x1f]/g,'').trim().slice(0,20)||undefined,id,slot,position:{x:slot===0?-1:1,y:0,z:-1.5},vy:0,input:zeroInput(),motion:createMotion(),defense:createDefense(),locomotion:createLocomotion(),phase:'HELD',charge:0,passCharge:0,ack:-1,receivedAt:this.time,rateAt:this.time,rateCount:0,queue:[],buttons:new Set(),score:0,attempts:0,made:0};
-  const occupied=[...this.actors.values()];Object.assign(a.position,recoverBody(a.position,occupied.map(b=>({id:b.id,x:b.position.x,z:b.position.z,radius:BODY.radius}))).position);
+  const a:OnlineActor={screen:createScreen(),processedInputSeq:-1,processedMoveSeq:0,processedActionSeq:-1,receivedMoveSeq:0,sequencedMovement:false,moves:[],net:{received:0,consumed:0,discarded:0,queueLength:0,oldestAgeMs:0,timeouts:0,lastCancel:'none',lastCancelAt:0,lastReceiveAt:0},recoveryCount:0,lastPositionWriter:'server:spawn',nickname:nickname?.replace(/[\x00-\x1f]/g,'').trim().slice(0,20)||undefined,id,slot,position:{x:slot===0?-1:1,y:0,z:-1.5},vy:0,input:zeroInput(),motion:createMotion(),defense:createDefense(),locomotion:createLocomotion(),phase:'HELD',charge:0,passCharge:0,ack:-1,receivedAt:this.time,rateAt:this.time,rateCount:0,queue:[],buttons:new Set(),score:0,attempts:0,made:0};
+  const occupied=[...this.actors.values()];Object.assign(a.position,recoverBody(a.position,occupied.flatMap(b=>bodyShapes(b.id,b.position,b.screen))).position);
   this.actors.set(id,a);if(!this.everJoined){this.ownerId=id;this.lastTouchId=id;this.state.ballVelocity={x:0,y:0,z:0};a.motion=createMotion('DRIBBLE');this.everJoined=true;this.possession++;this.focus(a);this.state.ball=controlledPosition(this.state,a.input,'player');}this.revision++;return a;
  }
  receive(id:string,value:unknown){const a=this.actors.get(id);if(!a)return false;
@@ -49,7 +50,7 @@ export class OnlineWorld{
   }
   const starts=actors.map(a=>({...a.position}));
   const recovering=actors.some(a=>!validBodyPosition(a.position,[]))||(actors.length===2&&Math.hypot(actors[0].position.x-actors[1].position.x,actors[0].position.z-actors[1].position.z)<2*BODY.radius-BODY.tolerance);
-  const movement:MovingActor[]=actors.map(a=>{const c=applied.get(a.id);return {position:a.position,vy:a.vy,phase:a.phase,input:c?.input??a.input,enabled:!a.sequencedMovement||!!c,jump:c?.jump??false};});
+  const movement:MovingActor[]=actors.map(a=>{const c=applied.get(a.id);return {position:a.position,vy:a.vy,phase:a.phase,input:c?.input??a.input,enabled:!a.sequencedMovement||!!c,jump:c?.jump??false,screen:a.screen};});
   const movementResult=integrateMovement(movement,dt);
   actors.forEach((a,i)=>{const command=applied.get(a.id);a.vy=movement[i].vy;
    if(command){a.processedMoveSeq=command.moveSeq;a.processedInputSeq=command.seq;}else if(!a.sequencedMovement)a.processedInputSeq=a.ack;
@@ -64,11 +65,12 @@ export class OnlineWorld{
  }
  actions(a:OnlineActor,actions:{action:Action;input:Input;seq:number}[]){const s=this.focus(a);
   for(const record of actions){const action=record.action,actionInput=record.input;a.processedActionSeq=Math.max(a.processedActionSeq,record.seq);
-   if(action==='jump'){if(s.player.y===0&&s.vy===0)s.vy=CFG.jump;continue;}
+   if(action==='jump'){a.screen.active=false;if(s.player.y===0&&s.vy===0)s.vy=CFG.jump;continue;}
    if(action==='movementSync')continue;
-   if(action==='cancel'){a.buttons.clear();cancelAllCharges(s);cancelDefense(s);this.chargeVersions.delete(a.id);this.chargeStartedAt.delete(a.id);continue;}
+   if(action==='cancel'){a.screen.active=false;a.buttons.clear();cancelAllCharges(s);cancelDefense(s);this.chargeVersions.delete(a.id);this.chargeStartedAt.delete(a.id);continue;}
+   if(action==='screen'){toggleScreen(s,actionInput,[...this.actors.values()].filter(b=>b.id!==a.id).flatMap(b=>bodyShapes(b.id,b.position,b.screen)));continue;}
    if(action==='crossover'){requestCrossover(s);continue;}
-   if(action==='steal'||action==='block'){const button=action==='steal'?'shot':'pass';if(!a.buttons.has(button)){a.buttons.add(button);startDefense(s,actionInput,action==='steal'?'STEAL':'BLOCK');}continue;}
+   if(action==='steal'||action==='block'){a.screen.active=false;const button=action==='steal'?'shot':'pass';if(!a.buttons.has(button)){a.buttons.add(button);startDefense(s,actionInput,action==='steal'?'STEAL':'BLOCK');}continue;}
    if(action==='shotDown'||action==='passDown'){const button=action==='shotDown'?'shot':'pass';if(a.buttons.has(button))continue;a.buttons.add(button);const ok=action==='shotDown'?startCharge(s):startPassCharge(s);if(ok){a.buttons.delete(button==='shot'?'pass':'shot');this.chargeVersions.set(a.id,this.possession);this.chargeStartedAt.set(a.id,this.time);}}
    if(action==='shotUp'||action==='passUp'){const button=action==='shotUp'?'shot':'pass',held=a.buttons.delete(button);if(held&&this.ownerId===a.id&&this.chargeVersions.get(a.id)===this.possession&&s.phase===(action==='shotUp'?'CHARGING':'PASS_CHARGING')&&!s.playerMotion.pending){const seconds=Math.max(0,(this.time-(this.chargeStartedAt.get(a.id)??this.time))/1000);if(action==='shotUp'){s.charge=Math.min(CFG.maxCharge,seconds);releaseShot(s,actionInput);}else{s.passCharge=Math.min(PASS.maxCharge,seconds);releasePass(s,actionInput);}}}
   }this.commit(a);

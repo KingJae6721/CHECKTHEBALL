@@ -61,7 +61,7 @@ export function createCharacter(scene:Scene,options:{name:string;firstPerson:boo
     torso.rotation.x=0;
     for(const side of ['left','right']){
       const sign=side==='right'?1:-1,air=pose.airborne?GAIT.airBend*(1-pose.shooting):0;
-      const hip=-pose.legBend+sign*pose.step*pose.stepForward-air,sideAngle=sign*pose.step*pose.stepSide;
+      const hip=-pose.legBend+sign*pose.step*pose.stepForward-air,sideAngle=sign*(pose.step*pose.stepSide+pose.legSpread);
       const lift=GAIT.footLift*Math.max(0,sign*Math.sin(pose.gaitPhase))*pose.gaitBlend;
       let knee=2*(pose.legBend+air);
       if(pose.gaitBlend>0){const vertical=(CHARACTER.pelvisY-pose.pelvisDrop-CHARACTER.footHeight-lift)/Math.max(.7,Math.cos(sideAngle));const lowerCos=(vertical-CHARACTER.upperLeg*Math.cos(hip))/CHARACTER.lowerLeg;knee=Math.max(0,Math.min(1.5,Math.acos(Math.max(-1,Math.min(1,lowerCos)))-hip));}
@@ -84,7 +84,7 @@ export function createCharacter(scene:Scene,options:{name:string;firstPerson:boo
       }else{handAxis.y-=flex*.09;handAxis.z+=flex*.04;handAxis.normalize();}
       const wristTarget=palm.subtract(handAxis.scale(CHARACTER.handLength/2));
       const delta=wristTarget.subtract(s),distance=Math.max(.001,Math.min(CHARACTER.upperArm+CHARACTER.forearm-.0001,delta.length())),dir=delta.normalize();
-      const hint=pose.shooting>.1?new Vector3(arm.side*.02,-1,.25):new Vector3(arm.side*.12,-1,-.35),bend=hint.subtract(dir.scale(Vector3.Dot(hint,dir)));
+      const hint=pose.screening>.1?new Vector3(arm.side*.6,-.6,.15):pose.shooting>.1?new Vector3(arm.side*.02,-1,.25):new Vector3(arm.side*.12,-1,-.35),bend=hint.subtract(dir.scale(Vector3.Dot(hint,dir)));
       if(bend.lengthSquared()<1e-8)bend.set(0,0,-1);bend.normalize();
       const along=(CHARACTER.upperArm**2-CHARACTER.forearm**2+distance**2)/(2*distance),height=Math.sqrt(Math.max(0,CHARACTER.upperArm**2-along**2));
       const elbow=s.add(dir.scale(along)).add(bend.scale(height)),wrist=s.add(dir.scale(distance));

@@ -1,16 +1,29 @@
-import {BODY,DUMMY,COURT} from './court';
+import {BODY,DUMMY,COURT,SCREEN} from './court';
+import type {ScreenState} from './screen';
 export type XZ={x:number;z:number};
 export type FixedBody={id:string;x:number;z:number;radius:number};
+// Three overlapping vertical cylinders widen the planted body only sideways.
+export function bodyShapes(id:string,p:XZ,screen?:ScreenState):FixedBody[]{
+ const offsets=screen?.active?[-SCREEN.sideOffset,0,SCREEN.sideOffset]:[0];
+ return offsets.map((side,i)=>({id:id+':'+i,x:p.x+Math.cos(screen?.yaw??0)*side,z:p.z-Math.sin(screen?.yaw??0)*side,radius:BODY.radius}));
+}
 export type BodyContact={normal:XZ;point:XZ;id:string};
 export type BodyMove={position:XZ;contacts:BodyContact[];blocked:XZ;recovered:boolean;safeReset:boolean};
 const clamp=(x:number,a:number,b:number)=>Math.max(a,Math.min(b,x));
 const bounds=BODY.bounds;
-export function fixedBodies(mode:string):FixedBody[]{
- const result=[{id:'dummy',x:DUMMY.position.x,z:DUMMY.position.z,radius:BODY.radius}];
+export type FixedPerson=FixedBody&{screen?:ScreenState};
+export const isBodyCollisionPractice=(mode:string)=>mode==='SCREEN'||mode==='GAP'||mode==='EDGE';
+// Character roots are separate from the multiple cylinders of a screen.
+export function fixedPeople(mode:string,dummyHasBall=false):FixedPerson[]{
+ const result:FixedPerson[]=[{id:'dummy',x:DUMMY.position.x,z:DUMMY.position.z,radius:BODY.radius}];
  if(mode==='SCREEN')result.push({id:'screen',x:0,z:1,radius:BODY.radius});
- if(mode==='GAP')result.push({id:'gap-left',x:-.48,z:1,radius:BODY.radius},{id:'gap-right',x:.48,z:1,radius:BODY.radius});
- if(mode==='EDGE')result.push({id:'edge',x:BODY.bounds.maxX-BODY.radius,z:1,radius:BODY.radius});
+ if(mode==='GAP')result.push({id:'gap-left',x:-.7,z:1,radius:BODY.radius},{id:'gap-right',x:.7,z:1,radius:BODY.radius});
+ if(mode==='EDGE')result.push({id:'edge',x:BODY.bounds.maxX-BODY.radius-SCREEN.sideOffset,z:1,radius:BODY.radius});
+ if(isBodyCollisionPractice(mode))for(const p of result)if(p.id!=='dummy'||!dummyHasBall)p.screen={active:true,yaw:Math.PI,blend:1};
  return result;
+}
+export function fixedBodies(mode:string,dummyHasBall=false):FixedBody[]{
+ return fixedPeople(mode,dummyHasBall).flatMap(p=>p.screen?bodyShapes(p.id,p,p.screen):[p]);
 }
 export function validBodyPosition(p:XZ,bodies:readonly FixedBody[],radius=BODY.radius){
  return Number.isFinite(p.x)&&Number.isFinite(p.z)&&p.x>=bounds.minX-BODY.tolerance&&p.x<=bounds.maxX+BODY.tolerance&&p.z>=bounds.minZ-BODY.tolerance&&p.z<=bounds.maxZ+BODY.tolerance&&bodies.every(b=>Math.hypot(p.x-b.x,p.z-b.z)>=radius+b.radius-BODY.tolerance);

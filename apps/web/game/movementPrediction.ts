@@ -15,10 +15,10 @@ export class MovementPrediction{
  corrections=0;totalCorrection=0;maxCorrection=0;lastCorrection=0;serverError=0;replayError=0;writer='waiting-authority';resets=0;
  simulate(command:PredictedCommand,authority:ActorSnapshot){
   const phase=command.phaseSeq>authority.processedActionSeq?command.phase:authority.phase;
-  const local:MovingActor={position:this.position,vy:this.vy,phase,input:command.input,enabled:true,jump:command.jump};
+  const local:MovingActor={position:this.position,vy:this.vy,phase,input:command.input,enabled:true,jump:command.jump,screen:this.actor?.screen};
   // Conservative collision proxy at the latest authoritative remote position.
   // The server still solves both moving actors and is the final authority.
-  const actors=[local];if(this.remote){const p=this.remote.position;Object.assign(this.position,recoverBody(this.position,[{id:this.remote.id,x:p.x,z:p.z,radius:BODY.radius}]).position);actors.push({position:{...p},vy:0,phase:this.remote.phase,input:this.remote.input,enabled:false,jump:false});}
+  const actors=[local];if(this.remote){const p=this.remote.position;Object.assign(this.position,recoverBody(this.position,[{id:this.remote.id,x:p.x,z:p.z,radius:BODY.radius}]).position);actors.push({position:{...p},vy:0,phase:this.remote.phase,input:this.remote.input,enabled:false,jump:false,screen:{...this.remote.screen}});}
   Object.assign(this.previousPosition,this.position);
   const before={...this.position},movement=integrateMovement(actors);this.vy=local.vy;
   if(movement.recovered)Object.assign(this.previousPosition,this.position);
@@ -29,7 +29,7 @@ export class MovementPrediction{
   this.remote=remote;this.serverError=hadActor?distance(before,authority.position):0;
   this.pending=this.pending.filter(c=>c.moveSeq>authority.processedMoveSeq);
   Object.assign(this.position,authority.position);Object.assign(this.previousPosition,authority.position);this.vy=authority.vy;
-  this.actor={...authority,position:this.position,locomotion:{...authority.locomotion,velocity:{...authority.locomotion.velocity}}};
+  this.actor={...authority,screen:{...authority.screen},position:this.position,locomotion:{...authority.locomotion,velocity:{...authority.locomotion.velocity}}};
   if(reset){this.pending.length=0;this.lastStepAt=0;}else for(const command of this.pending)this.simulate(command,authority);
   if(!this.pending.length)this.lastStepAt=0;
   this.replayError=hadActor?distance(before,this.position):0;
