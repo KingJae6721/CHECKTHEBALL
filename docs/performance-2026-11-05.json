@@ -1,0 +1,533 @@
+{
+  "date": "2026-11-05",
+  "conditions": {
+    "browser": "Chrome headless, GPU enabled",
+    "renderer": "NVIDIA GeForce RTX 3060 / ANGLE D3D11",
+    "viewport": "1280x900",
+    "scenarioSecondsSetting": 3,
+    "beforeFrontend": "https://checktheball.vercel.app/?diagnostics=1",
+    "afterFrontend": "local production static export",
+    "sameBackend": "wss://checktheball.onrender.com",
+    "afterNotPublished": true,
+    "notes": [
+      "Short sequential samples, not simultaneous controlled network conditions.",
+      "Body-contact zero-motion frames are expected blocking, not a smoothness regression.",
+      "RTT/jitter and scheduler percentiles on deployed server are unavailable until server update."
+    ]
+  },
+  "before": [
+    {
+      "scenario": "stationary-look",
+      "motionSamples": 0,
+      "zeroMotionFraction": null,
+      "maxMotionStep": null,
+      "separation": null,
+      "attempts": 0,
+      "frames": 467,
+      "frameP50": 6.900000000000546,
+      "frameP95": 7,
+      "snapshotP50": 50.10000002384186,
+      "snapshotP95": 53.89999997615814,
+      "corrections": 0,
+      "lastCorrection": 0,
+      "serverTiming": {
+        "tickMs": 0.022791000083088875,
+        "maxTickMs": 0.2669560005888343,
+        "callbackGapMs": 16,
+        "discardedTimeMs": 0
+      },
+      "cancelCounts": {
+        "POINTER_LOCK_ACQUIRED": 1
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002487) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    {
+      "scenario": "solo-move",
+      "motionSamples": 433,
+      "zeroMotionFraction": 0.5842956120092379,
+      "maxMotionStep": 0.0408333333333335,
+      "separation": null,
+      "attempts": 0,
+      "frames": 434,
+      "frameP50": 6.900000000001455,
+      "frameP95": 7,
+      "snapshotP50": 50.299999952316284,
+      "snapshotP95": 55.39999997615814,
+      "corrections": 0,
+      "lastCorrection": 0,
+      "serverTiming": {
+        "tickMs": 0.07322200015187263,
+        "maxTickMs": 0.9655440002679825,
+        "callbackGapMs": 17,
+        "discardedTimeMs": 0
+      },
+      "cancelCounts": {
+        "POINTER_LOCK_ACQUIRED": 1
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002487) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    {
+      "scenario": "two-separated",
+      "motionSamples": 432,
+      "zeroMotionFraction": 0.6898148148148148,
+      "maxMotionStep": 0.081666666666667,
+      "separation": 12.158117304916095,
+      "attempts": 0,
+      "frames": 435,
+      "frameP50": 6.900000000001455,
+      "frameP95": 7,
+      "snapshotP50": 49.699999928474426,
+      "snapshotP95": 95.5,
+      "corrections": 0,
+      "lastCorrection": 0,
+      "serverTiming": {
+        "tickMs": 0.07101199962198734,
+        "maxTickMs": 3.414106000214815,
+        "callbackGapMs": 16,
+        "discardedTimeMs": 0
+      },
+      "cancelCounts": {
+        "POINTER_LOCK_ACQUIRED": 1
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002487) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    {
+      "scenario": "body-contact",
+      "motionSamples": 433,
+      "zeroMotionFraction": 0.9330254041570438,
+      "maxMotionStep": 0.04083333333333333,
+      "separation": 0.8400099999999999,
+      "attempts": 0,
+      "frames": 434,
+      "frameP50": 6.900000000001455,
+      "frameP95": 7,
+      "snapshotP50": 50.10000002384186,
+      "snapshotP95": 102.20000004768372,
+      "corrections": 0,
+      "lastCorrection": 0,
+      "serverTiming": {
+        "tickMs": 0.00624999962747097,
+        "maxTickMs": 0.8180109998211265,
+        "callbackGapMs": 25,
+        "discardedTimeMs": 0
+      },
+      "cancelCounts": {
+        "POINTER_LOCK_ACQUIRED": 1
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002487) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    {
+      "scenario": "shot",
+      "motionSamples": 0,
+      "zeroMotionFraction": null,
+      "maxMotionStep": null,
+      "separation": 2,
+      "attempts": 1,
+      "frames": 523,
+      "frameP50": 6.900000000001455,
+      "frameP95": 7,
+      "snapshotP50": 7.5,
+      "snapshotP95": 103.10000002384186,
+      "corrections": 0,
+      "lastCorrection": 0,
+      "serverTiming": {
+        "tickMs": 0.1068919999524951,
+        "maxTickMs": 0.6627069991081953,
+        "callbackGapMs": 17,
+        "discardedTimeMs": 0
+      },
+      "cancelCounts": {
+        "POINTER_LOCK_ACQUIRED": 1,
+        "PENDING_LIMIT": 1
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002487) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    {
+      "scenario": "pass",
+      "motionSamples": 0,
+      "zeroMotionFraction": null,
+      "maxMotionStep": null,
+      "separation": 2,
+      "attempts": 0,
+      "frames": 459,
+      "frameP50": 6.900000000001455,
+      "frameP95": 7,
+      "snapshotP50": 50.5,
+      "snapshotP95": 100.09999990463257,
+      "corrections": 0,
+      "lastCorrection": 0,
+      "serverTiming": {
+        "tickMs": 0.0320810005068779,
+        "maxTickMs": 0.3023180002346635,
+        "callbackGapMs": 16,
+        "discardedTimeMs": 0
+      },
+      "cancelCounts": {
+        "POINTER_LOCK_ACQUIRED": 1
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002487) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    }
+  ],
+  "after": [
+    {
+      "scenario": "stationary-look",
+      "motionSamples": 0,
+      "zeroMotionFraction": null,
+      "maxMotionStep": null,
+      "separation": null,
+      "attempts": 0,
+      "frames": 468,
+      "frameP50": 6.900000000000546,
+      "frameP95": 7,
+      "snapshotP50": 50,
+      "snapshotP95": 53.10000002384186,
+      "corrections": 0,
+      "lastCorrection": 0,
+      "serverTiming": {
+        "tickMs": 0.024350999854505062,
+        "maxTickMs": 0.8957229992374778,
+        "callbackGapMs": 16,
+        "discardedTimeMs": 0
+      },
+      "cancelCounts": {
+        "POINTER_LOCK_ACQUIRED": 1
+      },
+      "metrics": {
+        "rttMs": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "rttVariationMs": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "pingSupported": false,
+        "pingTimeouts": 0,
+        "snapshotGapMs": {
+          "count": 94,
+          "p50": 50,
+          "p95": 54.300000071525574,
+          "max": 102
+        },
+        "interpolationUnderflows": 0,
+        "underflowFrames": 0,
+        "bufferAheadMs": 131.06666671437233,
+        "corrections": 0,
+        "lastCorrectionM": 0,
+        "totalCorrectionM": 0,
+        "maxCorrectionM": 0,
+        "serverTiming": {
+          "tickMs": 0.024350999854505062,
+          "maxTickMs": 0.8957229992374778,
+          "callbackGapMs": 16,
+          "discardedTimeMs": 0
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002487) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    {
+      "scenario": "solo-move",
+      "motionSamples": 434,
+      "zeroMotionFraction": 0.02534562211981567,
+      "maxMotionStep": 0.054471666900316906,
+      "separation": null,
+      "attempts": 0,
+      "frames": 435,
+      "frameP50": 6.900000000001455,
+      "frameP95": 7,
+      "snapshotP50": 50.10000002384186,
+      "snapshotP95": 98.29999995231628,
+      "corrections": 0,
+      "lastCorrection": 0,
+      "serverTiming": {
+        "tickMs": 0.037351000122725964,
+        "maxTickMs": 0.9046319993212819,
+        "callbackGapMs": 16,
+        "discardedTimeMs": 0
+      },
+      "cancelCounts": {
+        "POINTER_LOCK_ACQUIRED": 1
+      },
+      "metrics": {
+        "rttMs": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "rttVariationMs": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "pingSupported": false,
+        "pingTimeouts": 0,
+        "snapshotGapMs": {
+          "count": 152,
+          "p50": 50,
+          "p95": 54.300000071525574,
+          "max": 103.5
+        },
+        "interpolationUnderflows": 0,
+        "underflowFrames": 0,
+        "bufferAheadMs": 141.66666676212117,
+        "corrections": 0,
+        "lastCorrectionM": 0,
+        "totalCorrectionM": 0,
+        "maxCorrectionM": 0,
+        "serverTiming": {
+          "tickMs": 0.037351000122725964,
+          "maxTickMs": 0.9046319993212819,
+          "callbackGapMs": 16,
+          "discardedTimeMs": 0
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002487) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    {
+      "scenario": "two-separated",
+      "motionSamples": 433,
+      "zeroMotionFraction": 0.27251732101616627,
+      "maxMotionStep": 0.05357333315809587,
+      "separation": 12.278965050039854,
+      "attempts": 0,
+      "frames": 435,
+      "frameP50": 6.900000000001455,
+      "frameP95": 7,
+      "snapshotP50": 50,
+      "snapshotP95": 56.5,
+      "corrections": 0,
+      "lastCorrection": 0,
+      "serverTiming": {
+        "tickMs": 0.045020999386906624,
+        "maxTickMs": 0.9046319993212819,
+        "callbackGapMs": 16,
+        "discardedTimeMs": 0
+      },
+      "cancelCounts": {
+        "POINTER_LOCK_ACQUIRED": 1
+      },
+      "metrics": {
+        "rttMs": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "rttVariationMs": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "pingSupported": false,
+        "pingTimeouts": 0,
+        "snapshotGapMs": {
+          "count": 200,
+          "p50": 50,
+          "p95": 80.89999997615814,
+          "max": 284.5
+        },
+        "interpolationUnderflows": 3,
+        "underflowFrames": 63,
+        "bufferAheadMs": 121.03333333329647,
+        "corrections": 0,
+        "lastCorrectionM": 0,
+        "totalCorrectionM": 0,
+        "maxCorrectionM": 0,
+        "serverTiming": {
+          "tickMs": 0.045020999386906624,
+          "maxTickMs": 0.9046319993212819,
+          "callbackGapMs": 16,
+          "discardedTimeMs": 0
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002487) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    {
+      "scenario": "body-contact",
+      "motionSamples": 431,
+      "zeroMotionFraction": 0.839907192575406,
+      "maxMotionStep": 0.02319333327492435,
+      "separation": 0.8400099999999999,
+      "attempts": 0,
+      "frames": 433,
+      "frameP50": 6.900000000001455,
+      "frameP95": 7,
+      "snapshotP50": 50.799999952316284,
+      "snapshotP95": 101.70000004768372,
+      "corrections": 0,
+      "lastCorrection": 0,
+      "serverTiming": {
+        "tickMs": 0.024191000498831272,
+        "maxTickMs": 0.3554990002885461,
+        "callbackGapMs": 16,
+        "discardedTimeMs": 0
+      },
+      "cancelCounts": {
+        "POINTER_LOCK_ACQUIRED": 1
+      },
+      "metrics": {
+        "rttMs": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "rttVariationMs": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "pingSupported": false,
+        "pingTimeouts": 0,
+        "snapshotGapMs": {
+          "count": 86,
+          "p50": 50.10000002384186,
+          "p95": 100.10000002384186,
+          "max": 117.89999997615814
+        },
+        "interpolationUnderflows": 6,
+        "underflowFrames": 13,
+        "bufferAheadMs": 82.77108394622519,
+        "corrections": 0,
+        "lastCorrectionM": 0,
+        "totalCorrectionM": 0,
+        "maxCorrectionM": 0,
+        "serverTiming": {
+          "tickMs": 0.024191000498831272,
+          "maxTickMs": 0.3554990002885461,
+          "callbackGapMs": 16,
+          "discardedTimeMs": 0
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002487) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    {
+      "scenario": "shot",
+      "motionSamples": 0,
+      "zeroMotionFraction": null,
+      "maxMotionStep": null,
+      "separation": 2,
+      "attempts": 1,
+      "frames": 532,
+      "frameP50": 6.900000000001455,
+      "frameP95": 7,
+      "snapshotP50": 50.39999997615814,
+      "snapshotP95": 101,
+      "corrections": 0,
+      "lastCorrection": 0,
+      "serverTiming": {
+        "tickMs": 0.11963300034403801,
+        "maxTickMs": 0.5485829999670386,
+        "callbackGapMs": 16,
+        "discardedTimeMs": 0
+      },
+      "cancelCounts": {
+        "POINTER_LOCK_ACQUIRED": 1
+      },
+      "metrics": {
+        "rttMs": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "rttVariationMs": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "pingSupported": false,
+        "pingTimeouts": 0,
+        "snapshotGapMs": {
+          "count": 98,
+          "p50": 50.199999928474426,
+          "p95": 65.5,
+          "max": 103.5
+        },
+        "interpolationUnderflows": 0,
+        "underflowFrames": 0,
+        "bufferAheadMs": 96.38597728885361,
+        "corrections": 0,
+        "lastCorrectionM": 0,
+        "totalCorrectionM": 0,
+        "maxCorrectionM": 0,
+        "serverTiming": {
+          "tickMs": 0.11963300034403801,
+          "maxTickMs": 0.5485829999670386,
+          "callbackGapMs": 16,
+          "discardedTimeMs": 0
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002487) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    },
+    {
+      "scenario": "pass",
+      "motionSamples": 0,
+      "zeroMotionFraction": null,
+      "maxMotionStep": null,
+      "separation": 2,
+      "attempts": 0,
+      "frames": 461,
+      "frameP50": 6.900000000001455,
+      "frameP95": 7,
+      "snapshotP50": 50.200000047683716,
+      "snapshotP95": 53.60000002384186,
+      "corrections": 0,
+      "lastCorrection": 0,
+      "serverTiming": {
+        "tickMs": 0.05811099987477064,
+        "maxTickMs": 0.408610999584198,
+        "callbackGapMs": 16,
+        "discardedTimeMs": 0
+      },
+      "cancelCounts": {
+        "POINTER_LOCK_ACQUIRED": 1
+      },
+      "metrics": {
+        "rttMs": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "rttVariationMs": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null
+        },
+        "pingSupported": false,
+        "pingTimeouts": 0,
+        "snapshotGapMs": {
+          "count": 92,
+          "p50": 50.199999928474426,
+          "p95": 53.800000071525574,
+          "max": 103.10000002384186
+        },
+        "interpolationUnderflows": 1,
+        "underflowFrames": 2,
+        "bufferAheadMs": 42.66666671409257,
+        "corrections": 0,
+        "lastCorrectionM": 0,
+        "totalCorrectionM": 0,
+        "maxCorrectionM": 0,
+        "serverTiming": {
+          "tickMs": 0.05811099987477064,
+          "maxTickMs": 0.408610999584198,
+          "callbackGapMs": 16,
+          "discardedTimeMs": 0
+        }
+      },
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002487) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+    }
+  ]
+}

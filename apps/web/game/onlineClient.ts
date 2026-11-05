@@ -1,3 +1,4 @@
+import {Samples} from '../../../packages/protocol/src/diagnostics';
 import {MovementPrediction} from './movementPrediction';
 import {Client,type Room} from '@colyseus/sdk';
 import {NETWORK,type Action} from '../../../packages/protocol/src/index';
@@ -13,17 +14,26 @@ export class OnlineSession{
  private lastPump=0;private accumulator=0;private pendingJump=false;private barrier=0;private phaseOverride:{slow:boolean;seq:number}|undefined;
  private clockOffset:number|undefined;private renderTime=-Infinity;private renderBase=-1;private renderFrame:WorldSnapshot|undefined;
  private closed=false;
+ private snapshotGaps=new Samples(200);private rtts=new Samples(32);private jitter=new Samples(32);private lastReceiveAt=0;private lastRtt:number|undefined;
+ private pingSequence=0;private nextPingAt=0;private pings=new Map<number,number>();private removePong:(()=>void)|undefined;
+ private underflow=false;underflowCount=0;underflowFrames=0;bufferAheadMs=0;pingTimeouts=0;
+ private pong=(value:{id:number})=>{if(!value||!Number.isSafeInteger(value.id))return;const sent=this.pings.get(value.id);if(sent===undefined)return;this.pings.delete(value.id);const rtt=performance.now()-sent;this.rtts.add(rtt);if(this.lastRtt!==undefined)this.jitter.add(Math.abs(rtt-this.lastRtt));this.lastRtt=rtt;this.record('pong',{rtt});};
+ private ping(now:number){if(!this.latest?.serverTiming?.supportsPing||typeof document!=='undefined'&&document.hidden)return;
+  for(const [id,sent] of this.pings)if(now-sent>5000){this.pings.delete(id);this.pingTimeouts++;}
+  if(now<this.nextPingAt||this.pings.size>=2)return;const id=++this.pingSequence;this.nextPingAt=now+1000;this.pings.set(id,now);this.room.send('diagnosticPing',{id});
+ }
+ metrics(){return {rttMs:this.rtts.summary(),rttVariationMs:this.jitter.summary(),pingSupported:!!this.latest?.serverTiming?.supportsPing,pingTimeouts:this.pingTimeouts,snapshotGapMs:this.snapshotGaps.summary(),interpolationUnderflows:this.underflowCount,underflowFrames:this.underflowFrames,bufferAheadMs:this.bufferAheadMs,corrections:this.prediction.corrections,lastCorrectionM:this.prediction.lastCorrection,totalCorrectionM:this.prediction.totalCorrection,maxCorrectionM:this.prediction.maxCorrection,serverTiming:this.latest?.serverTiming};}
  generated=0;cancelCounts:Record<string,number>={};trace:Record<string,unknown>[]=[];
  private frameMs=0;private renderMs=0;private lastAck=0;private rateAt=0;private rateGenerated=0;private rateConsumed=0;private rateReceived=0;private rates={generatedPerSecond:0,receivedPerSecond:0,consumedPerSecond:0};
  private record(kind:string,extra:Record<string,unknown>={}){
   const now=performance.now(),a=this.latest?.players.find(p=>p.id===this.room.sessionId);
-  this.trace.push({at:Date.now(),clientMs:now,kind,tick:this.latest?.tick,ack:a?.processedMoveSeq,ackAdvance:(a?.processedMoveSeq??0)-this.lastAck,pending:this.prediction.pending.length,oldestPendingMs:this.prediction.pending.length?now-(this.prediction.pending[0].sentAt??now):0,generated:this.generated,rates:{...this.rates},frameMs:this.frameMs,renderMs:this.renderMs,correction:this.prediction.replayError,corrections:this.prediction.corrections,server:a?.net,serverTiming:this.latest?.serverTiming,...extra});
+  this.trace.push({at:Date.now(),clientMs:now,kind,tick:this.latest?.tick,ack:a?.processedMoveSeq,ackAdvance:(a?.processedMoveSeq??0)-this.lastAck,pending:this.prediction.pending.length,oldestPendingMs:this.prediction.pending.length?now-(this.prediction.pending[0].sentAt??now):0,rttMs:this.lastRtt,bufferAheadMs:this.bufferAheadMs,underflows:this.underflowCount,generated:this.generated,rates:{...this.rates},frameMs:this.frameMs,renderMs:this.renderMs,correction:this.prediction.replayError,corrections:this.prediction.corrections,server:a?.net,serverTiming:this.latest?.serverTiming,...extra});
   this.lastAck=a?.processedMoveSeq??this.lastAck;if(this.trace.length>600)this.trace.shift();
  }
  recordFrame(frameMs:number,renderMs:number){this.frameMs=frameMs;this.renderMs=renderMs;if(frameMs>=50)this.record('longFrame');}
- exportDiagnostics(){return {exportedAt:new Date().toISOString(),cancelCounts:{...this.cancelCounts},trace:this.trace};}
+ exportDiagnostics(){return {exportedAt:new Date().toISOString(),metrics:this.metrics(),cancelCounts:{...this.cancelCounts},trace:this.trace};}
  constructor(readonly room:Room){
-  room.reconnection.enabled=false;room.onDrop(this.drop);room.onLeave(this.drop);room.onError(this.error);
+  if(typeof room.onMessage==='function')this.removePong=room.onMessage('diagnosticPong',this.pong);room.reconnection.enabled=false;room.onDrop(this.drop);room.onLeave(this.drop);room.onError(this.error);
   room.onStateChange(this.receive);if(room.state?.frame)this.receive(room.state);
  }
  private drop=()=>{this.connected=false;if(!this.status.startsWith('통신 규약'))this.status='연결 끊김 · 새 참가로 다시 접속하세요';this.prediction.pending.length=0;this.prediction.clearOffset();};
@@ -35,7 +45,7 @@ export class OnlineSession{
   if(!state.frame||this.closed)return;const frame=JSON.parse(state.frame) as WorldSnapshot,last=this.latest;
   if(frame.protocolVersion!==NETWORK.protocolVersion){this.connected=false;this.status=`통신 규약 불일치: 웹 v${NETWORK.protocolVersion} / 서버 ${frame.protocolVersion===undefined?'버전 없음(이전 서버)':'v'+frame.protocolVersion}. 같은 포트의 이전 게임 서버 또는 오래된 dist 실행 여부를 확인하세요.`;if(this.room.connection?.isOpen)void this.room.leave();return;}
   if(last&&(frame.tick<=last.tick||frame.time<=last.time)){this.droppedSnapshots++;return;}
-  const now=performance.now(),offset=frame.time-now;
+  const now=performance.now(),offset=frame.time-now;if(this.lastReceiveAt)this.snapshotGaps.add(now-this.lastReceiveAt);this.lastReceiveAt=now;
   this.clockOffset=this.clockOffset===undefined||Math.abs(offset-this.clockOffset)>NETWORK.maxPredictionGapMs?offset:this.clockOffset+Math.max(-2,Math.min(2,offset-this.clockOffset))*.1;
   this.frames.push(frame);if(this.frames.length>40)this.frames.shift();
   const self=frame.players.find(a=>a.id===this.room.sessionId);if(!self)return;
@@ -56,7 +66,7 @@ export class OnlineSession{
   if(other.includes('cancel')||other.includes('movementSync')){const cancel=other.includes('cancel');this.cancelCounts[reason]=(this.cancelCounts[reason]??0)+1;this.record(cancel?'cancel':'movementSync',{reason,seq});this.barrier=seq;this.pendingJump=false;if(cancel)this.phaseOverride={slow:false,seq};this.prediction.pending.length=0;this.prediction.clearOffset();this.accumulator=0;this.lastPump=0;this.prediction.writer='client:cancel-barrier';}
  }
  advance(now:number,input:Input){
-  if(!this.connected||!this.self||this.closed)return;
+  if(!this.connected||!this.self||this.closed)return;this.ping(now);
   if(!this.lastPump){this.lastPump=now;return;}const elapsed=now-this.lastPump;this.lastPump=now;
   if(this.barrier){this.accumulator=0;return;}
   const step=1000/NETWORK.tickRate;
@@ -73,8 +83,10 @@ export class OnlineSession{
  }
  sample(now:number){
   const last=this.latest;if(!last)return;
-  const target=Math.min(last.time,now+(this.clockOffset??last.time-now)-NETWORK.interpolationMs);
-  this.renderTime=Math.max(this.renderTime,target);let a=this.frames[0],b=last;
+  const desired=now+(this.clockOffset??last.time-now)-NETWORK.interpolationMs;
+  const short=this.frames.length>1&&desired>=last.time;if(short){this.underflowFrames++;if(!this.underflow)this.underflowCount++;}this.underflow=short;
+  const target=Math.min(last.time,desired);
+  this.renderTime=Math.max(this.renderTime,target);this.bufferAheadMs=Math.max(0,last.time-this.renderTime);let a=this.frames[0],b=last;
   for(const f of this.frames){if(f.time<=this.renderTime)a=f;if(f.time>=this.renderTime){b=f;break;}}
   if(a===b||b.time===a.time)return b;
   const t=Math.max(0,Math.min(1,(this.renderTime-a.time)/(b.time-a.time)));
@@ -83,22 +95,25 @@ export class OnlineSession{
   const out=this.renderFrame!;out.time=mix(a.time,b.time,t);out.tick=mix(a.tick,b.tick,t);
   for(const p of out.players){
    const source=a.players.find(x=>x.id===p.id)!,q=b.players.find(x=>x.id===p.id);if(!q||p.id===this.room.sessionId)continue;
+   const teleported=q.lastPositionWriter.includes('safe-reset')&&q.recoveryCount!==source.recoveryCount;if(teleported){Object.assign(p.position,source.position);continue;}
    p.position.x=mix(source.position.x,q.position.x,t);p.position.y=mix(source.position.y,q.position.y,t);p.position.z=mix(source.position.z,q.position.z,t);
    p.vy=mix(source.vy,q.vy,t);p.input.yaw=angle(source.input.yaw,q.input.yaw,t);p.input.pitch=mix(source.input.pitch,q.input.pitch,t);
    if(source.motion.action===q.motion.action){p.motion.elapsed=mix(source.motion.elapsed,q.motion.elapsed,t);p.motion.clock=mix(source.motion.clock,q.motion.clock,t);const d=((q.motion.phase-source.motion.phase+1.5)%1)-.5;p.motion.phase=(source.motion.phase+d*t+1)%1;p.motion.dribbleYaw=angle(source.motion.dribbleYaw,q.motion.dribbleYaw,t);if(p.motion.crossover&&source.motion.crossover&&q.motion.crossover&&source.motion.crossover.from===q.motion.crossover.from)p.motion.crossover.elapsed=mix(source.motion.crossover.elapsed,q.motion.crossover.elapsed,t);}
    if(source.defense.kind===q.defense.kind)p.defense.elapsed=mix(source.defense.elapsed,q.defense.elapsed,t);
    p.locomotion.phase=angle(source.locomotion.phase,q.locomotion.phase,t);p.locomotion.blend=mix(source.locomotion.blend,q.locomotion.blend,t);p.locomotion.run=mix(source.locomotion.run,q.locomotion.run,t);
   }
+  Object.assign(out.ball,a.ball);
   if(a.revision===b.revision&&a.ownerId===b.ownerId&&a.flightKind===b.flightKind){out.ball.x=mix(a.ball.x,b.ball.x,t);out.ball.y=mix(a.ball.y,b.ball.y,t);out.ball.z=mix(a.ball.z,b.ball.z,t);}
   return out;
  }
  diagnostics(){
+  const metrics=this.metrics(),fmt=(v:number|null|undefined)=>v===null||v===undefined?'-':v.toFixed(1);
   const p=this.prediction,a=p.actor,server=this.latest?.players.find(x=>x.id===this.room.sessionId);
   const point=(v:{x:number;y:number;z:number}|undefined)=>v?`${v.x.toFixed(2)},${v.y.toFixed(2)},${v.z.toFixed(2)}`:'-';
-  return `RATE generated ${this.rates.generatedPerSecond.toFixed(1)}/s received ${this.rates.receivedPerSecond.toFixed(1)}/s consumed ${this.rates.consumedPerSecond.toFixed(1)}/s\nCANCEL/SYNC ${JSON.stringify(this.cancelCounts)}\nSERVER queue ${server?.net.queueLength??0} age ${server?.net.oldestAgeMs.toFixed(0)??0}ms consumed ${server?.net.consumed??0} discarded ${server?.net.discarded??0} timeouts ${server?.net.timeouts??0}\nTICK CPU ${this.latest?.serverTiming?.tickMs.toFixed(2)??'-'}ms max ${this.latest?.serverTiming?.maxTickMs.toFixed(2)??'-'}ms\nNET tick ${this.latest?.tick??'-'} · processedInput ${a?.processedInputSeq??'-'} · processedMove ${a?.processedMoveSeq??'-'}\nPENDING ${p.pending.length} · receiveSeq ${a?.ack??'-'} · staleDrops ${this.droppedSnapshots}\nERROR server ${p.serverError.toFixed(3)}m · afterReplay ${p.replayError.toFixed(3)}m\nCORRECTIONS ${p.corrections} · last ${p.lastCorrection.toFixed(3)}m · resets ${p.resets}\nPRED ${point(p.position)} / AUTH ${point(server?.position)}\nSERVER LOOK ${server?.input.yaw.toFixed(3)??'-'},${server?.input.pitch.toFixed(3)??'-'}\nVISUAL ${Math.hypot(p.offset.x,p.offset.y,p.offset.z).toFixed(3)}m\nWRITE ${p.writer}\nSERVER ${a?.lastPositionWriter??'-'} · overlapRecoveries ${a?.recoveryCount??0}`;
+  return `WS RTT p50 ${fmt(metrics.rttMs.p50)} p95 ${fmt(metrics.rttMs.p95)}ms / variation p95 ${fmt(metrics.rttVariationMs.p95)}ms (${metrics.pingSupported?'game WS':'server update required'})\nSNAP gap p50 ${fmt(metrics.snapshotGapMs.p50)} p95 ${fmt(metrics.snapshotGapMs.p95)}ms / buffer ${fmt(this.bufferAheadMs)}ms / underruns ${this.underflowCount}\nSERVER tick p95 ${fmt(metrics.serverTiming?.tickP95Ms)}ms / schedule p95 ${fmt(metrics.serverTiming?.scheduleP95Ms)}ms / debt ${fmt(metrics.serverTiming?.debtMs)}ms\nRATE generated ${this.rates.generatedPerSecond.toFixed(1)}/s received ${this.rates.receivedPerSecond.toFixed(1)}/s consumed ${this.rates.consumedPerSecond.toFixed(1)}/s\nCANCEL/SYNC ${JSON.stringify(this.cancelCounts)}\nSERVER queue ${server?.net.queueLength??0} age ${server?.net.oldestAgeMs.toFixed(0)??0}ms consumed ${server?.net.consumed??0} discarded ${server?.net.discarded??0} timeouts ${server?.net.timeouts??0}\nTICK CPU ${this.latest?.serverTiming?.tickMs.toFixed(2)??'-'}ms max ${this.latest?.serverTiming?.maxTickMs.toFixed(2)??'-'}ms\nNET tick ${this.latest?.tick??'-'} · processedInput ${a?.processedInputSeq??'-'} · processedMove ${a?.processedMoveSeq??'-'}\nPENDING ${p.pending.length} · receiveSeq ${a?.ack??'-'} · staleDrops ${this.droppedSnapshots}\nERROR server ${p.serverError.toFixed(3)}m · afterReplay ${p.replayError.toFixed(3)}m\nCORRECTIONS ${p.corrections} · last ${p.lastCorrection.toFixed(3)}m / sum ${p.totalCorrection.toFixed(3)}m / max ${p.maxCorrection.toFixed(3)}m · resets ${p.resets}\nPRED ${point(p.position)} / AUTH ${point(server?.position)}\nSERVER LOOK ${server?.input.yaw.toFixed(3)??'-'},${server?.input.pitch.toFixed(3)??'-'}\nVISUAL ${Math.hypot(p.offset.x,p.offset.y,p.offset.z).toFixed(3)}m\nWRITE ${p.writer}\nSERVER ${a?.lastPositionWriter??'-'} · overlapRecoveries ${a?.recoveryCount??0}`;
  }
- resetDiagnostics(){this.prediction.corrections=0;this.prediction.lastCorrection=0;this.prediction.resets=0;this.droppedSnapshots=0;}
- close(){if(this.closed)return;this.closed=true;this.connected=false;this.room.onStateChange.remove(this.receive);this.room.onDrop.remove(this.drop);this.room.onLeave.remove(this.drop);this.room.onError.remove(this.error);this.prediction.pending.length=0;if(this.room.connection?.isOpen)void this.room.leave();}
+ resetDiagnostics(){this.rtts.clear();this.jitter.clear();this.snapshotGaps.clear();this.underflowCount=0;this.underflowFrames=0;this.pingTimeouts=0;this.trace.length=0;this.prediction.corrections=0;this.prediction.totalCorrection=0;this.prediction.maxCorrection=0;this.prediction.lastCorrection=0;this.prediction.resets=0;this.droppedSnapshots=0;}
+ close(){if(this.closed)return;this.closed=true;this.connected=false;this.removePong?.();this.pings.clear();this.room.onStateChange.remove(this.receive);this.room.onDrop.remove(this.drop);this.room.onLeave.remove(this.drop);this.room.onError.remove(this.error);this.prediction.pending.length=0;if(this.room.connection?.isOpen)void this.room.leave();}
 }
 export async function connectOnline(roomId?:string,nickname?:string){const address=process.env.NEXT_PUBLIC_GAME_SERVER_URL;if(!address)throw Error('NEXT_PUBLIC_GAME_SERVER_URL을 설정하고 웹 서버를 다시 시작하세요.');if(!/^wss?:\/\//.test(address))throw Error('게임 서버 주소는 ws:// 또는 wss://로 설정하세요.');
  const client=new Client(address);const room=roomId?await client.joinById(roomId.trim(),{nickname}):await client.create('basketball',{nickname});return new OnlineSession(room);

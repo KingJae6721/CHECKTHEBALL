@@ -11,31 +11,40 @@ const distance=(a:Vec,b:Vec)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
 export class MovementPrediction{
  actor:ActorSnapshot|undefined;remote:ActorSnapshot|undefined;pending:PredictedCommand[]=[];
  position:Vec={x:0,y:0,z:0};vy=0;offset:Vec={x:0,y:0,z:0};
- corrections=0;lastCorrection=0;serverError=0;replayError=0;writer='waiting-authority';resets=0;
+ previousPosition:Vec={x:0,y:0,z:0};private lastStepAt=0;private renderOffset:Vec={x:0,y:0,z:0};
+ corrections=0;totalCorrection=0;maxCorrection=0;lastCorrection=0;serverError=0;replayError=0;writer='waiting-authority';resets=0;
  simulate(command:PredictedCommand,authority:ActorSnapshot){
   const phase=command.phaseSeq>authority.processedActionSeq?command.phase:authority.phase;
   const local:MovingActor={position:this.position,vy:this.vy,phase,input:command.input,enabled:true,jump:command.jump};
   // Conservative collision proxy at the latest authoritative remote position.
   // The server still solves both moving actors and is the final authority.
   const actors=[local];if(this.remote){const p=this.remote.position;Object.assign(this.position,recoverBody(this.position,[{id:this.remote.id,x:p.x,z:p.z,radius:BODY.radius}]).position);actors.push({position:{...p},vy:0,phase:this.remote.phase,input:this.remote.input,enabled:false,jump:false});}
-  const before={...this.position};integrateMovement(actors);this.vy=local.vy;
+  Object.assign(this.previousPosition,this.position);
+  const before={...this.position},movement=integrateMovement(actors);this.vy=local.vy;
+  if(movement.recovered)Object.assign(this.previousPosition,this.position);
   if(this.actor){this.actor.vy=this.vy;advanceLocomotion(this.actor.locomotion,this.position.x-before.x,this.position.z-before.z,CFG.dt,command.input.yaw,this.position.y===0);}
  }
  accept(authority:ActorSnapshot,remote:ActorSnapshot|undefined,reset=false){
   const hadActor=!!this.actor,before={...this.position},visual={x:this.position.x+this.offset.x,y:this.position.y+this.offset.y,z:this.position.z+this.offset.z};
   this.remote=remote;this.serverError=hadActor?distance(before,authority.position):0;
   this.pending=this.pending.filter(c=>c.moveSeq>authority.processedMoveSeq);
-  Object.assign(this.position,authority.position);this.vy=authority.vy;
+  Object.assign(this.position,authority.position);Object.assign(this.previousPosition,authority.position);this.vy=authority.vy;
   this.actor={...authority,position:this.position,locomotion:{...authority.locomotion,velocity:{...authority.locomotion.velocity}}};
-  if(reset)this.pending.length=0;else for(const command of this.pending)this.simulate(command,authority);
+  if(reset){this.pending.length=0;this.lastStepAt=0;}else for(const command of this.pending)this.simulate(command,authority);
+  if(!this.pending.length)this.lastStepAt=0;
   this.replayError=hadActor?distance(before,this.position):0;
-  if(hadActor&&this.replayError>NETWORK.positionEpsilon){this.corrections++;this.lastCorrection=this.replayError;}
+  if(hadActor&&this.replayError>NETWORK.positionEpsilon){this.corrections++;this.lastCorrection=this.replayError;this.totalCorrection+=this.replayError;this.maxCorrection=Math.max(this.maxCorrection,this.replayError);}
   // Logical correction is already complete. Only a small visual residual decays.
   if(!reset&&hadActor&&this.replayError<NETWORK.visualSnapDistance&&distance(visual,this.position)<NETWORK.visualSnapDistance){this.offset.x=visual.x-this.position.x;this.offset.y=visual.y-this.position.y;this.offset.z=visual.z-this.position.z;}
   else this.clearOffset();
   this.writer=reset?'client:authority-reset':'client:authority+pending-replay';if(reset)this.resets++;
  }
- push(command:PredictedCommand){if(!this.actor)return;this.pending.push(command);this.simulate(command,this.actor);this.writer='client:fixed-prediction';}
+ push(command:PredictedCommand){if(!this.actor)return;this.pending.push(command);this.simulate(command,this.actor);this.lastStepAt=command.sentAt??performance.now();this.writer='client:fixed-prediction';}
+ // One local fixed step of presentation interpolation, never the remote snapshot buffer.
+ // Colliders, release origins and ACK replay continue to use position directly.
+ presentationOffset(now:number){const alpha=this.lastStepAt?Math.max(0,Math.min(1,(now-this.lastStepAt)/(1000/NETWORK.tickRate))):1;
+  for(const axis of ['x','y','z'] as const)this.renderOffset[axis]=(this.previousPosition[axis]-this.position[axis])*(1-alpha)+this.offset[axis];return this.renderOffset;
+ }
  clearOffset(){this.offset.x=0;this.offset.y=0;this.offset.z=0;}
  visualStep(dt:number){const decay=Math.exp(-NETWORK.visualResponse*dt);this.offset.x*=decay;this.offset.y*=decay;this.offset.z*=decay;}
 }
