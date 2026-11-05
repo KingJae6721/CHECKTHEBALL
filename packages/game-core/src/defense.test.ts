@@ -32,7 +32,7 @@ test('moving hand versus stationary ball is swept too',()=>{
  const s=block();s.defense.previousHand={x:-1,y:1.9,z:.36};s.defense.hand={x:1,y:1.9,z:.36};const p={x:0,y:1.9,z:.36};s.ball={...p};assert.ok(tryBlock(s,p,p));
 });
 test('block rejects held/loose balls and inactive windows',()=>{
- for(const kind of ['held','loose','early','late'] as const){const s=block(),h=s.defense.hand;if(kind==='held')s.owner='dummy';if(kind==='loose')s.flightKind=null;if(kind==='early'){s.defense.elapsed=.03;s.defense.previousElapsed=.01;}if(kind==='late'){s.defense.elapsed=.6;s.defense.previousElapsed=.5;}assert.equal(tryBlock(s,{...h,z:h.z+1},{...h,z:h.z-1}),false,kind);}
+ for(const kind of ['held','loose','early','late'] as const){const s=block(),h=s.defense.hand;if(kind==='held')s.owner='dummy';if(kind==='loose')s.flightKind=null;if(kind==='early'){s.defense.elapsed=.03;s.defense.previousElapsed=.01;}if(kind==='late'){s.defense.elapsed=DEFENSE.block.prepare+DEFENSE.block.active+.1;s.defense.previousElapsed=DEFENSE.block.prepare+DEFENSE.block.active+.01;}assert.equal(tryBlock(s,{...h,z:h.z+1},{...h,z:h.z-1}),false,kind);}
 });
 test('block cannot sweep or reach through board geometry',()=>{
  const s=block(),b=COURT.board.center;s.player={x:b.x,y:b.y-1.45,z:b.z-.4};s.defense.hand={...b,z:b.z+.25};s.defense.previousHand={...s.defense.hand};assert.equal(tryBlock(s,{...b,z:b.z+.8},{...b,z:b.z-.8}),false);assert.equal(s.defense.reason,'OBSTRUCTED');
@@ -76,7 +76,7 @@ test('core defensive hand matches visible target at both active heights',()=>{
  for(const kind of ['STEAL','BLOCK'] as const){const s=defender();startDefense(s,input(),kind);s.defense.jumpQueued=false;advanceDefense(s,input(),.12);const p=characterPose(s,input(),'player'),h=defenseHand(s.player,0,kind,.12);assert.ok(Math.hypot(p.rightHand.x-h.x,p.rightHand.y-h.y,p.rightHand.z-h.z)<.025);}
 });
 test('ground block retains its air-use guard through preparation and recovery',()=>{
- const s=defender();startDefense(s,input(),'BLOCK');for(let n=0;n<45;n++)stepGame(s,input());assert.ok(s.player.y>0);assert.equal(s.defense.kind,null);s.defense.cooldown=0;assert.equal(startDefense(s,input(),'BLOCK'),false);assert.equal(s.defense.reason,'AIR_USED');
+ const s=defender();startDefense(s,input(),'BLOCK');for(let n=0;n<Math.ceil((DEFENSE.block.prepare+DEFENSE.block.active+DEFENSE.block.recover)/CFG.dt)+1;n++)stepGame(s,input());assert.ok(s.player.y>0);assert.equal(s.defense.kind,null);s.defense.cooldown=0;assert.equal(startDefense(s,input(),'BLOCK'),false);assert.equal(s.defense.reason,'AIR_USED');
 });
 test('defense preparation and recovery join the resting hand without snapping',()=>{
  for(const kind of ['STEAL','BLOCK'] as const){const c=kind==='STEAL'?DEFENSE.steal:DEFENSE.block,base={x:0,y:0,z:0},a=defenseHand(base,0,kind,0),b=defenseHand(base,0,kind,c.prepare+c.active+c.recover);assert.ok(Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z)<1e-8);assert.equal(a.x,DEFENSE.handSide);assert.equal(a.y,DEFENSE.handHeight+COURT.floorY);assert.equal(a.z,DEFENSE.handForward);}

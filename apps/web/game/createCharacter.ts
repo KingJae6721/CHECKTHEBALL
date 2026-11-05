@@ -14,13 +14,14 @@ export function createCharacter(scene:Scene,options:{name:string;firstPerson:boo
   };
   const sphere=(name:string,parent:TransformNode,radius:number,mat:StandardMaterial,body=false)=>{const mesh=MeshBuilder.CreateSphere(prefix+':'+name,{diameter:radius*2,segments:12},scene);mesh.parent=parent;mesh.material=mat;mesh.isPickable=false;if(body&&options.firstPerson)mesh.setEnabled(false);return mesh;};
   const pelvis=joint('pelvis',root,0,CHARACTER.pelvisY);
-  box('pelvis-mesh',pelvis,DUMMY.torsoWidth*.95,CHARACTER.pelvisHeight,DUMMY.torsoDepth,0,0,0,trousers);
+  const pelvisMesh=box('pelvis-mesh',pelvis,DUMMY.torsoWidth*.95,CHARACTER.pelvisHeight,DUMMY.torsoDepth,0,0,0,trousers);
   const torso=joint('torso',pelvis,0,DUMMY.torsoY-CHARACTER.pelvisY);
-  box('torso-mesh',torso,DUMMY.torsoWidth,DUMMY.torsoHeight,DUMMY.torsoDepth,0,0,0,uniform);
+  const torsoMesh=box('torso-mesh',torso,DUMMY.torsoWidth,DUMMY.torsoHeight,DUMMY.torsoDepth,0,0,0,uniform);
   const neck=joint('neck',torso,0,DUMMY.neckY-DUMMY.torsoY);
   const neckMesh=MeshBuilder.CreateCylinder(prefix+':neck-mesh',{height:DUMMY.neckHeight,diameter:DUMMY.neckRadius*2},scene);neckMesh.parent=neck;neckMesh.material=skin;neckMesh.isPickable=false;neckMesh.setEnabled(!options.firstPerson);
   const head=joint('head',neck,0,DUMMY.headY-DUMMY.neckY);sphere('head-mesh',head,DUMMY.headRadius,skin,true);
   const arms:{side:number;shoulder:TransformNode;elbow:TransformNode;wrist:TransformNode;socket:TransformNode}[]=[];
+  const legs:TransformNode[]=[];let bodyVisible=true;
   for(const side of [-1,1]) {
     const name=side===1?'right':'left';
     const shoulder=joint(name+'Shoulder',torso,side*CHARACTER.shoulderX,CHARACTER.shoulderY-DUMMY.torsoY);
@@ -34,6 +35,7 @@ export function createCharacter(scene:Scene,options:{name:string;firstPerson:boo
     const socket=new TransformNode(prefix+':'+name+'HandSocket',scene);socket.parent=wrist;socket.position.y=-CHARACTER.handLength/2;
     arms.push({side,shoulder,elbow,wrist,socket});
     const hip=joint(name+'Hip',pelvis,side*DUMMY.legX,0);
+    legs.push(hip);
     sphere(name+'Hip-mesh',hip,CHARACTER.kneeRadius,trousers);
     box(name+'UpperLeg',hip,DUMMY.legWidth,CHARACTER.upperLeg,DUMMY.legDepth,0,-CHARACTER.upperLeg/2,0,trousers);
     const knee=joint(name+'Knee',hip,0,-CHARACTER.upperLeg);sphere(name+'Knee-mesh',knee,CHARACTER.kneeRadius,trousers);
@@ -46,6 +48,11 @@ export function createCharacter(scene:Scene,options:{name:string;firstPerson:boo
   let lastPose:CharacterPose|null=null;
   function update(pose:CharacterPose) {
     lastPose=pose;
+    const showBody=!pose.attacking;
+    if(options.firstPerson&&bodyVisible!==showBody){
+      bodyVisible=showBody;pelvisMesh.setEnabled(bodyVisible);torsoMesh.setEnabled(bodyVisible);
+      for(const leg of legs)leg.setEnabled(bodyVisible);
+    }
     root.position.set(pose.position.x,pose.position.y,pose.position.z);root.rotation.set(0,pose.yaw,0);
     pelvis.position.set(pose.pelvisSway,CHARACTER.pelvisY-pose.pelvisDrop,-pose.pelvisBack);
     // Aim with the arms, without rotating the torso around the camera eye.

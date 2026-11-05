@@ -148,7 +148,8 @@ export function characterPose(s:State,input:Input,owner:'player'|'dummy',fixedBa
   const totalBend=legBend+defenseBend;
   const strideAngle=locomotion?(GAIT.walkAngle+(GAIT.runAngle-GAIT.walkAngle)*gait!.run)*gait!.blend:0;
   const pelvisDrop=(CHARACTER.upperLeg+CHARACTER.lowerLeg)*(1-Math.cos(totalBend))+(locomotion?(CHARACTER.upperLeg+CHARACTER.lowerLeg)*(1-Math.cos(strideAngle))+GAIT.pelvisBob*(1-Math.cos(gait!.phase*2))*gait!.blend:0);
-  const pelvisBack=(CHARACTER.upperLeg-CHARACTER.lowerLeg)*Math.sin(totalBend),shoulderLift=shooting*SHOT_FORM.shoulderLift;
+  const block=DEFENSE.block,blockExtension=defenseAction==='BLOCK'?Math.max(0,Math.min(1,s.defense.elapsed/block.prepare,(block.prepare+block.active+block.recover-s.defense.elapsed)/block.recover)):0;
+  const pelvisBack=(CHARACTER.upperLeg-CHARACTER.lowerLeg)*Math.sin(totalBend),shoulderLift=shooting*SHOT_FORM.shoulderLift+block.shoulderLift*blockExtension;
   const up={x:Math.sin(yaw)*Math.sin(pitch),y:Math.cos(pitch),z:Math.cos(yaw)*Math.sin(pitch)},forward=passDirection(yaw,pitch);
   const idle=(side:number)=>localPoint(base,yaw,side*DUMMY.armX,DUMMY.handY,DUMMY.handForward+.012*Math.sin(m.clock*1.6));
   let right=idle(1),left=idle(-1),wrist=0,rightWrist=0,leftWrist=0;
@@ -201,6 +202,6 @@ export function characterPose(s:State,input:Input,owner:'player'|'dummy',fixedBa
     const length=Math.hypot(dx,dy,dz),reach=CHARACTER.upperArm+CHARACTER.forearm+CHARACTER.handLength/2-.005,scale=Math.min(1,reach/Math.max(length,1e-8));
     return {x:shoulder.x+dx*scale,y:shoulder.y+dy*scale,z:shoulder.z+dz*scale};
   };
-  return {position:{...base},yaw,pitch,shooting,torsoSide,legBend:totalBend,step,stepSide,stepForward,pelvisSway,gaitPhase:gait?.phase??0,gaitBlend:locomotion?gait!.blend:0,airborne:owner==='player'&&s.player.y>0,pelvisDrop,pelvisBack,shoulderLift,rightHand:reachable(right,1),leftHand:reachable(left,-1),wrist,rightWrist,leftWrist,dribbleHand:m.currentDribbleHand,crossoverStage:m.crossover?.stage??'NONE',crossoverProgress:crossProgress,action:m.action,locomotion:m.locomotion,clock:m.clock,ballSocket:owned?{...s.ball}:null};
+  return {position:{...base},attacking:owned||m.action==='RELEASE',yaw,pitch,shooting,torsoSide,legBend:totalBend,step,stepSide,stepForward,pelvisSway,gaitPhase:gait?.phase??0,gaitBlend:locomotion?gait!.blend:0,airborne:owner==='player'&&s.player.y>0,pelvisDrop,pelvisBack,shoulderLift,rightHand:reachable(right,1),leftHand:reachable(left,-1),wrist,rightWrist,leftWrist,dribbleHand:m.currentDribbleHand,crossoverStage:m.crossover?.stage??'NONE',crossoverProgress:crossProgress,action:m.action,locomotion:m.locomotion,clock:m.clock,ballSocket:owned?{...s.ball}:null};
 }
 export type CharacterPose=ReturnType<typeof characterPose>;

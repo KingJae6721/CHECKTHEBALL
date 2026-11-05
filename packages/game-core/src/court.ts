@@ -1,5 +1,5 @@
 export const BODY = {
-  radius: .30, height: 1.8, tolerance: 1e-6, skin: 1e-5, iterations: 8, recoveryIterations: 16,
+  radius: .42, height: 1.8, tolerance: 1e-6, skin: 1e-5, iterations: 8, recoveryIterations: 16,
   bounds: { minX: -7.1, maxX: 7.1, minZ: -7, maxZ: 6.7 }, safe: { x: 0, z: -6 },
 };
 // Metres, seconds. Shared by simulation and rendering.
@@ -86,7 +86,7 @@ export const CROSSOVER = {
 export const DEFENSE = {
   stanceBend: .22, response: 10, handSide: .42, handHeight: 1.16, handForward: .28, stepRate: 9, stepAngle: .13,
   steal: { prepare: .10, active: .16, recover: .24, cooldown: .65, reach: .53, radius: .28, angle: 1.0, handY: 1.12 },
-  block: { prepare: .06, active: .36, recover: .30, cooldown: .85, radius: .22, handY: 1.90, forward: .36, side: .18, restitution: .65, impulse: .8, maxSpeed: 28, pickupLock: .25 },
+  block: { prepare: .06, active: .54, recover: .24, cooldown: .85, radius: .38, handY: 2.0, forward: .40, side: .18, shoulderLift: .09, restitution: .65, impulse: .8, maxSpeed: 28, pickupLock: .25 },
 };
 export const DEFENSE_PRACTICE = { warningSeconds: 2.5, shotCharge: .7 };
 
