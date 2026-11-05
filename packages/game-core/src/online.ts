@@ -14,18 +14,18 @@ export type ActorSnapshot=Omit<OnlineActor,'queue'|'moves'|'buttons'|'rateAt'|'r
 export type WorldSnapshot={events?:GameEvent[];serverTiming?:{tickMs:number;maxTickMs:number;callbackGapMs:number;discardedTimeMs:number;supportsPing?:boolean;tickP50Ms?:number|null;tickP95Ms?:number|null;scheduleDelayMs?:number;scheduleP95Ms?:number|null;debtMs?:number};protocolVersion:number;tick:number;time:number;revision:number;ownerId:string|null;shooterId:string|null;passerId:string|null;players:ActorSnapshot[];ball:Vec;velocity:Vec;flightKind:State['flightKind'];resolved:boolean;shotId:number;score:number;attempts:number;made:number;message:string};
 export {movePair} from './bodies';
 export class OnlineWorld{
- readonly state=createState();readonly actors=new Map<string,OnlineActor>();time=0;tick=0;revision=0;ownerId:string|null=null;shooterId:string|null=null;passerId:string|null=null;everJoined=false;private airborne=new Set<string>();
+ readonly state=createState();readonly actors=new Map<string,OnlineActor>();time=0;tick=0;revision=0;ownerId:string|null=null;shooterId:string|null=null;passerId:string|null=null;lastTouchId:string|null=null;everJoined=false;private airborne=new Set<string>();
  possession=0;chargeStartedAt=new Map<string,number>();chargeVersions=new Map<string,number>();pickupLockedUntil=0;ledger=new Map<string,{score:number;attempts:number;made:number}>();
  constructor(){this.state.networked=true;}
  focus(a:OnlineActor){const s=this.state;s.player=a.position;s.vy=a.vy;s.playerMotion=a.motion;s.defense=a.defense;s.locomotion=a.locomotion;s.charge=a.charge;s.passCharge=a.passCharge;
   s.owner=this.ownerId===a.id?'player':this.ownerId?'dummy':'none';s.phase=this.ownerId===a.id?a.phase:s.flightKind?'IN_FLIGHT':'RESOLVING';s.passFrom=this.passerId===a.id?'player':'dummy';s.dummyMotion=this.actors.get(this.ownerId??'')?.motion??createMotion();return s;
  }
- changeOwner(id:string|null){if(this.ownerId===id)return;const old=this.actors.get(this.ownerId??'');if(old){if(!(id===null&&old.motion.action==='RELEASE'&&old.motion.fired))cancelMotion(old.motion,this.state.ball,false);old.phase='HELD';old.charge=0;old.passCharge=0;this.chargeVersions.delete(old.id);this.chargeStartedAt.delete(old.id);}this.ownerId=id;this.possession++;this.revision++;}
+ changeOwner(id:string|null){if(id!==null)this.lastTouchId=id;if(this.ownerId===id)return;const old=this.actors.get(this.ownerId??'');if(old){if(!(id===null&&old.motion.action==='RELEASE'&&old.motion.fired))cancelMotion(old.motion,this.state.ball,false);old.phase='HELD';old.charge=0;old.passCharge=0;this.chargeVersions.delete(old.id);this.chargeStartedAt.delete(old.id);}this.ownerId=id;this.possession++;this.revision++;}
  commit(a:OnlineActor){const s=this.state,target=s.owner==='player'?a.id:s.owner==='none'?null:this.ownerId;this.changeOwner(target);a.vy=s.vy;a.phase=this.ownerId===a.id?s.phase:'HELD';a.charge=this.ownerId===a.id?s.charge:0;a.passCharge=this.ownerId===a.id?s.passCharge:0;}
  join(id:string,nickname?:string){if(this.actors.size>=2)throw Error('ROOM_FULL');const slot=[0,1].find(n=>![...this.actors.values()].some(a=>a.slot===n))!;
   const a:OnlineActor={processedInputSeq:-1,processedMoveSeq:0,processedActionSeq:-1,receivedMoveSeq:0,sequencedMovement:false,moves:[],net:{received:0,consumed:0,discarded:0,queueLength:0,oldestAgeMs:0,timeouts:0,lastCancel:'none',lastCancelAt:0,lastReceiveAt:0},recoveryCount:0,lastPositionWriter:'server:spawn',nickname:nickname?.replace(/[\x00-\x1f]/g,'').trim().slice(0,20)||undefined,id,slot,position:{x:slot===0?-1:1,y:0,z:-1.5},vy:0,input:zeroInput(),motion:createMotion(),defense:createDefense(),locomotion:createLocomotion(),phase:'HELD',charge:0,passCharge:0,ack:-1,receivedAt:this.time,rateAt:this.time,rateCount:0,queue:[],buttons:new Set(),score:0,attempts:0,made:0};
   const occupied=[...this.actors.values()];Object.assign(a.position,recoverBody(a.position,occupied.map(b=>({id:b.id,x:b.position.x,z:b.position.z,radius:BODY.radius}))).position);
-  this.actors.set(id,a);if(!this.everJoined){this.ownerId=id;this.state.ballVelocity={x:0,y:0,z:0};a.motion=createMotion('DRIBBLE');this.everJoined=true;this.possession++;this.focus(a);this.state.ball=controlledPosition(this.state,a.input,'player');}this.revision++;return a;
+  this.actors.set(id,a);if(!this.everJoined){this.ownerId=id;this.lastTouchId=id;this.state.ballVelocity={x:0,y:0,z:0};a.motion=createMotion('DRIBBLE');this.everJoined=true;this.possession++;this.focus(a);this.state.ball=controlledPosition(this.state,a.input,'player');}this.revision++;return a;
  }
  receive(id:string,value:unknown){const a=this.actors.get(id);if(!a)return false;
   if(this.time-a.rateAt>=1000){a.rateAt=this.time;a.rateCount=0;}if(++a.rateCount>NETWORK.maxMessagesPerSecond||!validInput(value))return false;
@@ -80,14 +80,14 @@ export class OnlineWorld{
   for(const a of actors){this.focus(a);if(this.ownerId!==a.id)updateUnownedMotion(a.motion,dt,a.locomotion.speed>.015);advanceDefense(s,a.input,dt);this.commit(a);}
   const owner=this.actors.get(this.ownerId??'');
   if(owner){this.focus(owner);if(owner.phase==='CHARGING'&&!owner.motion.pending)s.charge=Math.min(CFG.maxCharge,(this.time-(this.chargeStartedAt.get(owner.id)??this.time))/1000);if(owner.phase==='PASS_CHARGING'&&!owner.motion.pending)s.passCharge=Math.min(PASS.maxCharge,(this.time-(this.chargeStartedAt.get(owner.id)??this.time))/1000);
-   if(advanceControlledMotion(s,owner.input,'player',dt)){const kind=owner.motion.pending?.kind;firePendingPlayer(s);if(s.owner==='none'){this.passerId=owner.id;if(kind==='shot'){this.shooterId=owner.id;owner.attempts++;}}}this.commit(owner);
+   if(advanceControlledMotion(s,owner.input,'player',dt)){const kind=owner.motion.pending?.kind;firePendingPlayer(s);if(s.owner==='none'){this.lastTouchId=owner.id;this.passerId=owner.id;if(kind==='shot'){this.shooterId=owner.id;owner.attempts++;}}}this.commit(owner);
    if(this.ownerId===owner.id)s.ball=controlledPosition(s,owner.input,'player');
    for(const defender of this.ordered(actors).filter(a=>a.id!==this.ownerId)){this.focus(defender);if(trySteal(s,defender.input)){emitGameEvent(s,'catch',s.ball,1,defender.id);this.commit(defender);}}
   }else{
    s.flight+=dt;
    advanceBall(s,dt,(prev,next,floor,collided,t0,t1)=>{
     if(s.flightKind==='shot'){if(floor||collided)s.shotTouched=true;const shooter=this.actors.get(this.shooterId??'');if(shooter){this.focus(shooter);if(outsideAcquisitionVolumes(s,shooter.input,prev)||outsideAcquisitionVolumes(s,shooter.input,next))s.shotExited=true;}}
-    for(const a of this.ordered(actors)){this.focus(a);if(!collided&&tryBlock(s,prev,next,t0,t1)){emitGameEvent(s,'blockHit',s.ball,Math.hypot(s.ballVelocity.x,s.ballVelocity.y,s.ballVelocity.z),a.id);this.pickupLockedUntil=this.time+DEFENSE.block.pickupLock*1000;this.revision++;return;}}
+    for(const a of this.ordered(actors)){this.focus(a);if(!collided&&tryBlock(s,prev,next,t0,t1)){this.lastTouchId=a.id;emitGameEvent(s,'blockHit',s.ball,Math.hypot(s.ballVelocity.x,s.ballVelocity.y,s.ballVelocity.z),a.id);this.pickupLockedUntil=this.time+DEFENSE.block.pickupLock*1000;this.revision++;return;}}
     if(s.flightKind==='shot'&&!s.resolved){if(rimCrossing(prev,next))this.outcome(true);else if(floor)this.outcome(false);}
     if(s.flightKind==='pass'&&floor)makeLoose(s);
     if(this.time<this.pickupLockedUntil)return;
@@ -99,7 +99,18 @@ export class OnlineWorld{
     }
    },CFG.gravity,(kind,p,strength)=>impactEvent(s,kind,p,strength));
    if(!this.ownerId){if(s.flightKind==='shot'&&s.flight>=PHYSICS.maxFlight&&!s.resolved)this.outcome(false);if(s.flightKind==='pass'&&s.flight>=PRACTICE.passFlightSeconds)makeLoose(s);if(!s.flightKind)s.looseAge+=dt;
-    if(actors.length&&(Math.abs(s.ball.x)>PHYSICS.outDistance||Math.abs(s.ball.z)>PHYSICS.outDistance||s.looseAge>PRACTICE.recoverySeconds)){if(s.flightKind==='shot'&&!s.resolved)this.outcome(false);this.acquire(this.ordered(actors)[0],s.ball,false);this.revision++;}
+    const out=Math.abs(s.ball.x)>PHYSICS.outDistance||Math.abs(s.ball.z)>PHYSICS.outDistance;
+    if(actors.length&&out){
+     if(s.flightKind==='shot'&&!s.resolved)this.outcome(false);
+     // Surface contacts do not change the last player touch. A block does.
+     // Keep a departed actor's ID so the remaining opponent receives the ball.
+     const receiver=actors.find(a=>this.lastTouchId!==null&&a.id!==this.lastTouchId)??this.ordered(actors)[0];
+     this.focus(receiver);giveBall(s,'player');s.ball=controlledPosition(s,receiver.input,'player');this.commit(receiver);
+     s.message='아웃 오브 바운드 · '+(receiver.nickname??receiver.id.slice(0,5))+' 공격';
+    }else if(actors.length&&s.looseAge>PRACTICE.recoverySeconds){
+     if(s.flightKind==='shot'&&!s.resolved)this.outcome(false);
+     this.acquire(this.ordered(actors)[0],s.ball,false);this.revision++;
+    }
    }
   }
   for(const a of actors){this.focus(a);finishDefense(s);this.commit(a);}
