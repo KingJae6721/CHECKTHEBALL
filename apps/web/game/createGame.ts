@@ -1,3 +1,4 @@
+import {createNet} from './createNet';
 import {AudioManager} from './audioManager';
 import {AudioTimeline,MotionSounds} from './audioTimeline';
 import type {AudioSettings} from './audioConfig';
@@ -51,8 +52,7 @@ export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,
  line('board-border',[boardPoint(-COURT.board.width/2,-COURT.board.height/2),boardPoint(-COURT.board.width/2,COURT.board.height/2),boardPoint(COURT.board.width/2,COURT.board.height/2),boardPoint(COURT.board.width/2,-COURT.board.height/2),boardPoint(-COURT.board.width/2,-COURT.board.height/2)]);
  line('board-square',[boardPoint(-.3,-.45),boardPoint(-.3,0),boardPoint(.3,0),boardPoint(.3,-.45)]);
  const rim=MeshBuilder.CreateTorus('rim',{diameter:CFG.rimRadius*2,thickness:COURT.rimTubeRadius*2,tessellation:COURT.rimSegments},scene);rim.position.copyFromFloats(CFG.rim.x,CFG.rim.y,CFG.rim.z);rim.material=orange;
- for(let i=0;i<12;i++){const a=i/12*Math.PI*2;line('net',[new Vector3(Math.sin(a)*.23,3.04,5.7+Math.cos(a)*.23),new Vector3(Math.sin(a+.35)*.14,2.65,5.7+Math.cos(a+.35)*.14)],white,.007);}
- for(const y of[2.8,2.95]){const pts=[];for(let i=0;i<=24;i++){const a=i/24*Math.PI*2;const r=y===2.8?.17:.21;pts.push(new Vector3(Math.sin(a)*r,y,5.7+Math.cos(a)*r));}line('net-ring',pts,white,.006);}
+ const net=createNet(scene,white);
  const ball=MeshBuilder.CreateSphere('ball',{diameter:CFG.ballRadius*2,segments:20},scene);ball.material=ballmat;
  for(const rot of[0,Math.PI/2]){const seam=MeshBuilder.CreateTorus('seam',{diameter:.239,thickness:.006,tessellation:40},scene);seam.parent=ball;seam.rotation.x=rot;seam.material=dark;}
  const seam=MeshBuilder.CreateTorus('seam',{diameter:.239,thickness:.006,tessellation:40},scene);seam.parent=ball;seam.rotation.z=Math.PI/2;seam.material=dark;
@@ -104,8 +104,8 @@ export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,
  };
 
  function clear(reason='INPUT_CLEAR'){resetCameraMotion(cameraMotion);keys.clear();networkButtons.clear();if(!online)buttons.clear(state);input={...input,x:0,z:0,sprint:false,jump:false};online?.send(input,['cancel'],reason);}
- function reset(){if(online)return;clearAudio();audioTimeline=new AudioTimeline();resetState(state);input=zeroInput();if(state.practice.mode==='BLOCK')input.yaw=Math.atan2(DUMMY.position.x-state.player.x,DUMMY.position.z-state.player.z);clear();update();}
- function scenario(mode:PracticeMode){if(locked||online)return;clearAudio();audioTimeline=new AudioTimeline();clear();selectPractice(state,mode);input=zeroInput();if(mode==='BLOCK')input.yaw=Math.atan2(DUMMY.position.x-state.player.x,DUMMY.position.z-state.player.z);update();}
+ function reset(){if(online)return;net.reset();clearAudio();audioTimeline=new AudioTimeline();resetState(state);input=zeroInput();if(state.practice.mode==='BLOCK')input.yaw=Math.atan2(DUMMY.position.x-state.player.x,DUMMY.position.z-state.player.z);clear();update();}
+ function scenario(mode:PracticeMode){if(locked||online)return;net.reset();clearAudio();audioTimeline=new AudioTimeline();clear();selectPractice(state,mode);input=zeroInput();if(mode==='BLOCK')input.yaw=Math.atan2(DUMMY.position.x-state.player.x,DUMMY.position.z-state.player.z);update();}
  function keydown(e:KeyboardEvent){if(e.code==='Escape'){clear('ESCAPE');update();}if(process.env.NODE_ENV==='development'&&e.code==='F3'&&!e.repeat){e.preventDefault();debugVisible=!debugVisible;if(debugVisible){frameDiagnostics.reset();online?.resetDiagnostics();}for(const mesh of [...debugMeshes,...defenseMeshes])mesh.setEnabled(debugVisible);return;}if(!locked)return;if(e.code==='KeyQ'){e.preventDefault();if(!e.repeat&&!keys.has(e.code)){if(online)online.send(input,['crossover']);else requestCrossover(state,e.repeat);}keys.add(e.code);update();return;}if(['Space','KeyW','KeyA','KeyS','KeyD','ShiftLeft','KeyR'].includes(e.code))e.preventDefault();if(e.code==='Space'&&!e.repeat){if(online)online.send(input,['jump']);else input.jump=true;}if(e.code==='KeyR'&&!e.repeat)reset();keys.add(e.code);}
  function keyup(e:KeyboardEvent){keys.delete(e.code);}
  function mousemove(e:MouseEvent){if(!locked)return;frameDiagnostics.mouse();input.yaw+=e.movementX*.002;input.pitch=Math.max(-1.2,Math.min(1.2,input.pitch+e.movementY*.002));}
@@ -145,6 +145,7 @@ export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,
  let visualEye={x:eye.x+Math.cos(input.yaw)*cameraMotion.side,y:eye.y+cameraMotion.up,z:eye.z-Math.sin(input.yaw)*cameraMotion.side};
  if((cameraMotion.side!==0||cameraMotion.up!==0)&&!isBallPathClear(eye,visualEye)){resetCameraMotion(cameraMotion);visualEye=eye;}
  camera.position.set(visualEye.x,visualEye.y,visualEye.z);camera.rotation.set(input.pitch,input.yaw,0);const ballCorrection=online?.ownsBall?correction:{x:0,y:0,z:0};ball.position.copyFromFloats(state.ball.x+ballCorrection.x,state.ball.y+ballCorrection.y,state.ball.z+ballCorrection.z);if(state.phase==='IN_FLIGHT'||state.phase==='RESOLVING')ball.rotation.x+=delta*5;const eventTime=onlineFrame?.time??state.tick*1000/60,selfTime=online?.latest?.time??eventTime,selfId=online?.room.sessionId??'player';
+ if(!online||online.latest&&onlineFrame)net.update(online?.latest?.events??state.events.recent,eventTime);
  audioTimeline.ingest(online?.latest?.events??state.events.recent,now);
  if(locked&&!document.hidden){
   for(const event of audioTimeline.drain(eventTime,selfTime,selfId))audio.play({key:`event:${event.eventId}`,actorId:event.actorId??undefined,kind:event.kind,position:event.position,strength:event.strength,near:event.actorId===selfId&&(event.kind==='jump'||event.kind==='land'||event.kind==='blockJump')},camera.position,input.yaw,now);
