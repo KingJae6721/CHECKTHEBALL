@@ -4,6 +4,7 @@ import {WebSocketTransport} from '@colyseus/ws-transport';
 import {OnlineWorld} from '../../../packages/game-core/src/online';
 import {NETWORK} from '../../../packages/protocol/src/index';
 import {Samples} from '../../../packages/protocol/src/diagnostics';
+import {validateNickname} from '../../../packages/protocol/src/nickname';
 export class CourtEnvelope extends Schema{declare tick:number;declare frame:string;constructor(){super();this.tick=0;this.frame='';}}
 defineTypes(CourtEnvelope,{tick:'uint32',frame:'string'});
 export class BasketballRoom extends Room<{state:CourtEnvelope}>{
@@ -16,7 +17,7 @@ export class BasketballRoom extends Room<{state:CourtEnvelope}>{
   this.onMessage('diagnosticPing',(client,value)=>{const now=performance.now();if(!value||!Number.isSafeInteger(value.id)||value.id<0||now-(this.pingAt.get(client.sessionId)??-Infinity)<500)return;this.pingAt.set(client.sessionId,now);client.send('diagnosticPong',{id:value.id});});
  }
  publish(){this.state.tick=this.world.tick;this.state.frame=JSON.stringify({...this.world.snapshot(),serverTiming:this.timing});}
- onAuth(){return this.world.canJoin();}
+ onAuth(_client:Client,options?:{nickname?:unknown}){if(!this.world.canJoin())throw Error('MATCH_NOT_JOINABLE');if(options?.nickname!==undefined&&validateNickname(options.nickname).error)throw Error('INVALID_NICKNAME');return true;}
  onJoin(client:Client,options?:{nickname?:unknown}){this.world.join(client.sessionId,typeof options?.nickname==='string'?options.nickname:undefined);this.publish();}
  onLeave(client:Client){this.pingAt.delete(client.sessionId);this.world.leave(client.sessionId);this.publish();}
 }

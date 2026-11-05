@@ -1,64 +1,85 @@
 'use client';
-import MatchPanel from './MatchPanel';
-import type {RoomMode} from '../../../packages/game-core/src/match';
-import OnlineScoreboard from './OnlineScoreboard';
+import {useEffect,useRef,useState} from 'react';
+import MatchPanel from './MatchPanel';import GameHud from './GameHud';import RoomInvite from './RoomInvite';import {Settings,Help,Credits} from './MenuPanels';
+import type {OnlineSession} from '../game/onlineClient';import type {Snapshot,createGame} from '../game/createGame';
 import {AUDIO_STORAGE_KEY,parseAudioSettings,type AudioSettings} from '../game/audioConfig';
-import { useEffect, useRef, useState } from 'react';
-import type {OnlineSession} from '../game/onlineClient';
-import type { Snapshot } from '../game/createGame';
-import { CFG } from '../../../packages/game-core/src/simulation';
-import {createDefense,defenseStage} from '../../../packages/game-core/src/defense';
-import {createPractice,type PracticeMode} from '../../../packages/game-core/src/practice';
-import { PASS, DEFENSE_PRACTICE, HEAD_BOB } from '../../../packages/game-core/src/court';
-import { passSpeed } from '../../../packages/game-core/src/pass';
-const modes:Record<PracticeMode,string>={PASS:'A · 패스 연습',STEAL:'B · 스틸 연습',BLOCK:'C · 블록 연습',ATTACK:'D · 공격 자세 확인',SCREEN:'E · 몸 충돌 · 정면/점프',GAP:'F · 몸 충돌 · 좁은 틈',EDGE:'G · 몸 충돌 · 경계'};
-const initial:Snapshot={defense:createDefense(),practice:createPractice(),passCharge:0,owner:'player',flightKind:null,aimingDummy:false,score:0,attempts:0,made:0,phase:'HELD',charge:0,message:'라인에 서서 첫 슛을 던져보세요',lastTiming:null,distance:7.2,locked:false};
+import {CAMERA_KEY,NICKNAME_KEY,loadPreferences,savePreference,roomIdError,connectionError,ConnectionAttempt,type Store,type MenuScreen} from '../game/menuState';
+import {validateNickname,NICKNAME_MAX} from '../../../packages/protocol/src/nickname';
+import {HEAD_BOB} from '../../../packages/game-core/src/court';import {createDefense} from '../../../packages/game-core/src/defense';import {createPractice,type PracticeMode} from '../../../packages/game-core/src/practice';import type {RoomMode} from '../../../packages/game-core/src/match';
+const scenarios:Record<PracticeMode,{name:string;description:string}>={PASS:{name:'패스 연습',description:'더미에게 패스하고 돌아오는 공을 받습니다.'},STEAL:{name:'스틸 연습',description:'더미의 공을 좌클로 스틸합니다.'},BLOCK:{name:'블록 연습',description:'슛 예고에 맞춰 우클 블록을 해봅니다.'},ATTACK:{name:'공격 연습',description:'드리블·슛·점프·크로스오버를 연습합니다.'},SCREEN:{name:'몸 충돌 · 정면과 점프',description:'고정 스크린을 정면과 옆에서 통과해봅니다.'},GAP:{name:'몸 충돌 · 좁은 틈',description:'두 스크리너 사이와 옆으로 이동합니다.'},EDGE:{name:'몸 충돌 · 코트 경계',description:'경계 근처 스크린과 슬라이딩을 확인합니다.'}};
+const initial:Snapshot={defense:createDefense(),practice:createPractice(),passCharge:0,owner:'player',flightKind:null,aimingDummy:false,score:0,attempts:0,made:0,phase:'HELD',charge:0,message:'',lastTiming:null,distance:7.2,locked:false};
+function storage():Store|undefined{try{return window.localStorage;}catch{return undefined;}}
 export default function Game(){
- const canvas=useRef<HTMLCanvasElement>(null),runtime=useRef<ReturnType<typeof import('../game/createGame').createGame>|null>(null);
- const [state,setState]=useState(initial),[ready,setReady]=useState(false),[error,setError]=useState(''),[help,setHelp]=useState(false);
- const [audioSettings,setAudioSettings]=useState<AudioSettings>(()=>parseAudioSettings(null));
- useEffect(()=>{try{setAudioSettings(parseAudioSettings(localStorage.getItem(AUDIO_STORAGE_KEY)));}catch{}},[]);
- function changeAudio(next:AudioSettings){setAudioSettings(next);runtime.current?.setAudio(next);}
- const [session,setSession]=useState<OnlineSession>(),[roomId,setRoomId]=useState(''),[joining,setJoining]=useState(false);const joinAttempt=useRef(0),sessionRef=useRef<OnlineSession|undefined>(undefined);
- useEffect(()=>()=>{joinAttempt.current++;sessionRef.current?.close();},[]);
- useEffect(()=>{setReady(false);setState(initial);let cancelled=false;import('../game/createGame').then(({createGame})=>{if(cancelled||!canvas.current)return;try{runtime.current=createGame(canvas.current,setState,setError,session);runtime.current.setCameraMotion(cameraMotionEnabled);setReady(true);}catch(e){setError('3D 화면을 초기화하지 못했습니다. WebGL을 지원하는 데스크톱 브라우저에서 열어주세요.');console.error(e);}}).catch(()=>setError('게임 파일을 불러오지 못했습니다. 새로고침해 주세요.'));return()=>{cancelled=true;runtime.current?.dispose();runtime.current=null;};},[session]);
- const [nickname,setNickname]=useState('');const [roomMode,setRoomMode]=useState<RoomMode>('duel');
- const [cameraMotionEnabled,setCameraMotionEnabled]=useState(HEAD_BOB.enabled);
- async function join(create:boolean){if(!create&&!roomId.trim()){setError('참가할 Room ID를 입력하세요.');return;}const token=++joinAttempt.current;setJoining(true);setError('');try{const {connectOnline}=await import('../game/onlineClient');const connected=await connectOnline(create?undefined:roomId,nickname,roomMode);if(token!==joinAttempt.current){connected.close();return;}sessionRef.current=connected;setSession(connected);setRoomId(connected.room.roomId);}catch(e){if(token===joinAttempt.current)setError(e instanceof Error?e.message:'접속 실패 · 게임 서버와 Room ID를 확인하세요.');}finally{if(token===joinAttempt.current)setJoining(false);}}
- function leave(){joinAttempt.current++;setJoining(false);sessionRef.current?.close();sessionRef.current=undefined;setSession(undefined);setError('');}
- const passing=state.phase==='PASS_CHARGING';
- const power=passing?state.passCharge/PASS.maxCharge:state.charge/CFG.maxCharge;
- const pingMs=state.online?.pingMs;
- const pingQuality=pingMs==null?'unknown':pingMs<=100?'good':pingMs<=200?'fair':'poor';
- const pingDescription=pingMs==null?(state.online?.pingStatus??'핑 측정 중'):`게임 서버 왕복 지연 ${pingMs}ms · ${pingQuality==='good'?'좋음':pingQuality==='fair'?'보통':'나쁨'}`;
- const accuracy=state.attempts?Math.round(state.made/state.attempts*100):0;
- return <main className="game">
-  <canvas ref={canvas} aria-label="1인칭 농구 코트. 플레이 버튼으로 마우스를 잠그고 WASD로 이동하세요."/>
+ const canvas=useRef<HTMLCanvasElement>(null),runtime=useRef<ReturnType<typeof createGame>|null>(null),factory=useRef<typeof createGame|null>(null),sessionRef=useRef<OnlineSession|undefined>(undefined),gate=useRef(new ConnectionAttempt()),generation=useRef(0);
+ const [screen,setScreen]=useState<MenuScreen>('HOME'),[panel,setPanel]=useState<'MAIN'|'SETTINGS'|'HELP'|'CREDITS'>('MAIN');
+ const [state,setState]=useState(initial),[session,setSession]=useState<OnlineSession>(),[factoryReady,setFactoryReady]=useState(false),[sceneReady,setSceneReady]=useState(false),[hasPlayed,setHasPlayed]=useState(false);
+ const [nickname,setNickname]=useState(''),[nicknameError,setNicknameError]=useState(''),[profileReady,setProfileReady]=useState(false),[roomId,setRoomId]=useState(''),[roomMode,setRoomMode]=useState<RoomMode>('duel'),[scenario,setScenario]=useState<PracticeMode>('PASS'),[error,setError]=useState('');
+ const [audio,setAudio]=useState<AudioSettings>(()=>parseAudioSettings(null)),[camera,setCamera]=useState(HEAD_BOB.enabled);const prefs=useRef({audio:parseAudioSettings(null),camera:HEAD_BOB.enabled});
+ const playing=screen==='PLAYING',connecting=screen==='CONNECTING';
+ useEffect(()=>{const p=loadPreferences(storage(),'게스트'+Math.floor(1000+Math.random()*9000));setNickname(p.nickname);setAudio(p.audio);setCamera(p.camera);prefs.current={audio:p.audio,camera:p.camera};setProfileReady(true);},[]);
+ useEffect(()=>{let cancelled=false;import('../game/createGame').then(m=>{if(!cancelled){factory.current=m.createGame;setFactoryReady(true);}}).catch(()=>{if(!cancelled)setError('게임 파일을 불러오지 못했습니다. 새로고침해주세요.');});return()=>{cancelled=true;};},[]);
+ useEffect(()=>()=>{gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;sessionRef.current?.close();sessionRef.current=undefined;},[]);
+ useEffect(()=>{if(playing&&state.locked)return;const id=requestAnimationFrame(()=>document.querySelector<HTMLElement>('[data-menu-title]')?.focus());return()=>cancelAnimationFrame(id);},[screen,panel,state.locked]);
+ useEffect(()=>{const escape=(e:KeyboardEvent)=>{if(e.code==='Escape'&&!document.pointerLockElement&&panel!=='MAIN'){setPanel('MAIN');e.preventDefault();}};window.addEventListener('keydown',escape);return()=>window.removeEventListener('keydown',escape);},[panel]);
+ function saveName(){const v=validateNickname(nickname);setNicknameError(v.error??'');if(v.error)return false;setNickname(v.name);savePreference(storage(),NICKNAME_KEY,v.name);return true;}
+ function changeAudio(next:AudioSettings){prefs.current.audio=next;setAudio(next);savePreference(storage(),AUDIO_STORAGE_KEY,JSON.stringify(next));runtime.current?.setAudio(next);}
+ function changeCamera(next:boolean){prefs.current.camera=next;setCamera(next);savePreference(storage(),CAMERA_KEY,String(next));runtime.current?.setCameraMotion(next);}
+ function openPanel(next:typeof panel){if(connecting){gate.current.cancel();setScreen('FRIENDS');}runtime.current?.pause();setPanel(next);}
+ function home(){gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;sessionRef.current?.close();sessionRef.current=undefined;setSession(undefined);setSceneReady(false);setState(initial);setHasPlayed(false);setError('');setPanel('MAIN');setScreen('HOME');}
+ function navigate(next:'FRIENDS'|'PRACTICE_SELECT'){if(!saveName())return;setError('');setPanel('MAIN');setScreen(next);}
+ function enter(){setError('');setPanel('MAIN');void runtime.current?.start();}
+ function launch(online?:OnlineSession,autoStart=false){
+  if(runtime.current)return false;
+  if(!factory.current||!canvas.current){setError('코트를 준비 중입니다. 잠시 후 다시 눌러주세요.');return false;}
+  const id=++generation.current;setState(initial);setHasPlayed(false);setError('');canvas.current.hidden=false;
+  try{const rt=factory.current(canvas.current,s=>{if(id===generation.current){setState(s);if(s.locked)setHasPlayed(true);}},e=>{if(id===generation.current)setError(e);},online);runtime.current=rt;rt.setAudio(prefs.current.audio);rt.setCameraMotion(prefs.current.camera);if(!online)rt.scenario(scenario);setSceneReady(true);setPanel('MAIN');setScreen('PLAYING');if(autoStart)void rt.start();return true;}
+  catch{generation.current++;runtime.current?.dispose();runtime.current=null;canvas.current.hidden=true;setError('코트를 열지 못했습니다. 하드웨어 가속과 WebGL 지원을 확인해주세요.');return false;}
+ }
+ async function join(create:boolean){
+  if(!saveName())return;if(!create){const invalid=roomIdError(roomId);if(invalid){setError(invalid);return;}}
+  const token=gate.current.begin();if(token===null)return;setError('');setScreen('CONNECTING');
+  try{const {connectOnline}=await import('../game/onlineClient');if(!gate.current.current(token))return;const connected=await connectOnline(create?undefined:roomId.trim(),validateNickname(nickname).name,roomMode);
+   if(!gate.current.accept(token,connected))return;
+   if(!factory.current){connected.close();setScreen('FRIENDS');setError('코트를 준비 중입니다. 다시 눌러주세요.');return;}
+   sessionRef.current=connected;setSession(connected);setRoomId(connected.room.roomId);
+   if(!launch(connected)){connected.close();sessionRef.current=undefined;setSession(undefined);setScreen('FRIENDS');}
+  }catch(e){if(gate.current.current(token)){setError(connectionError(e));setScreen('FRIENDS');}}finally{gate.current.finish(token);}
+ }
+ function back(){gate.current.cancel();setError('');setScreen(connecting?'FRIENDS':'HOME');setPanel('MAIN');}
+ function chooseScenario(next:PracticeMode){setScenario(next);if(playing&&!session)runtime.current?.scenario(next);}
+ const ping=state.online?.pingMs,pingQuality=ping==null?'unknown':ping<=100?'good':ping<=200?'fair':'poor';
+ const showCard=!playing||!state.locked&&(!state.online?.match||panel!=='MAIN');
+ const chooser=<fieldset className="scenario-choices"><legend>연습 선택</legend>{Object.entries(scenarios).map(([id,item])=><label key={id}><input type="radio" name="scenario" value={id} checked={scenario===id} onChange={()=>chooseScenario(id as PracticeMode)}/><span><strong>{item.name}</strong><small>{item.description}</small></span></label>)}</fieldset>;
+ return <main className={`game ${!playing||!state.locked?'menu-shell':''}`} onKeyDownCapture={e=>{if(e.code!=='Escape'&&(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement))e.stopPropagation();}}>
+  <canvas ref={canvas} hidden={!playing} aria-label="농구 코트"/>
+  {!playing&&<div className="home-backdrop" aria-hidden="true"><svg viewBox="0 0 760 800"><path d="M35 765V40H725V765ZM35 445H725M270 40V280H490V40M270 280A110 110 0 0 0 490 280M70 40V115A310 310 0 0 0 690 115V40"/><circle cx="380" cy="95" r="18"/><path className="home-rim" d="M340 65H420M362 95H398"/></svg></div>}
   <div className="vignette"/>
-  <header className="topbar"><a className="brand" href="/" aria-label="CheckTheBall 홈"><span className="brand-icon">◉</span> CheckTheBall<span className="brand-slash">/</span></a><div className="mode"><i/> {state.online?(state.online.match?'1대1 경기':'온라인 자유 연습'):modes[state.practice.mode]} <span>{state.online?'ONLINE':'OFFLINE'}</span></div><div className="top-right">{state.online&&<span className={`network-ping ${pingQuality}`} title={pingDescription} aria-label={pingDescription}>{pingMs==null?'--':pingMs}<small>ms</small></span>}<span className="offline">{state.online?'SERVER AUTHORITY':'LOCAL SIMULATION'}</span><button className="icon-button" onClick={()=>setHelp(!help)} aria-label="조작 안내">?</button></div></header>
-  {state.online&&<OnlineScoreboard key={state.online.match?.id??0} players={state.online.players} selfId={state.online.selfId} ownerId={state.online.ownerId}/>}
-  <aside className="session"><div className="eyebrow">{state.online?'YOUR STATS':'YOUR SESSION'}</div><div className="score"><strong>{String(state.online?state.online.players.find(p=>p.id===state.online!.selfId)?.score??0:state.score).padStart(2,'0')}</strong><span>POINTS</span></div><div className="stats"><div><strong>{state.made}<small> / {state.attempts}</small></strong><span>MADE / SHOTS</span></div><div><strong>{accuracy}<small>%</small></strong><span>ACCURACY</span></div></div>{state.online&&<div className="online-scores">{state.online.players.map(p=><div key={p.id}>{p.id===state.online!.selfId?'나':'상대'} · {p.score}점 · {p.made}/{p.attempts}</div>)}</div>}<button className="reset" disabled={!!session} onClick={()=>runtime.current?.reset()}><span>↺</span> 세션 초기화 <kbd>R</kbd></button></aside>
-  <div className="court-label"><span className="eyebrow">THE NEIGHBORHOOD</span><h1>내 코트, 내 리듬.</h1><p>FIRST PERSON BASKETBALL · SPRINT 01</p></div>
-  {state.diagnostics&&<aside className="performance-debug" aria-label="Performance diagnostics"><strong>PERFORMANCE ? F3</strong><pre>{state.diagnostics.render}{state.diagnostics.net&&'\n'+state.diagnostics.net}</pre><small>Console: window.checkTheBallNetwork()</small></aside>}
-  <div className="crosshair"><span/><span/></div>
-  {state.screenActive&&<div className="screen-status" role="status">스크린 유지 · 이동하면 해제</div>}
-  <div className="possession" aria-live="polite"><strong>{state.owner==='player'?'공 소유 · PLAYER':state.owner==='dummy'?(state.online?'상대 보유':state.practice.mode==='PASS'?'더미 보유 · RETURN 준비':'더미 보유 · 연습 중'):state.flightKind==='pass'?'패스 비행 중':state.flightKind==='shot'?'슛 비행 중':'자유 공'}</strong><span>{state.owner==='player'?(state.phase==='CHARGING'?'슛 충전 중':passing?'패스 충전 중 · 우클을 놓아 발사':state.aimingDummy?'더미 방향 · 우클 누르기 → 놓기: 패스':'우클 누르기 → 놓기: 패스'):'좌클 스틸 / 우클 블록 · 공에 가까이 가서 회수'}</span></div>
-  {process.env.NODE_ENV==='development'&&state.debug?.visible&&<aside className="acquisition-debug" aria-label="공 획득 디버그"><strong>DIAGNOSTICS · F3</strong><div style={{whiteSpace:'pre-line'}}>{state.debug.render}{state.debug.net&&'\n'+state.debug.net}</div><div>DEFENSE {state.defense.kind??'IDLE'} · {defenseStage(state.defense)}<br/>{state.debug.defensePosition}<br/>BODY {state.debug.bodyMotion}<br/>ACTIVE {String(defenseStage(state.defense)==='ACTIVE')} · {state.defense.reason}</div><div>현재 차단: {state.debug.blocked}</div><div>최근 사유: {state.debug.event?.reason??'NONE'}</div>{state.debug.event&&<div>비행 {state.debug.event.flightSeconds.toFixed(2)}s / 자유 {state.debug.event.looseSeconds.toFixed(2)}s<br/>위치 {state.debug.event.position.x.toFixed(1)}, {state.debug.event.position.y.toFixed(1)}, {state.debug.event.position.z.toFixed(1)}</div>}{state.debug.pass&&<div>PASS {state.debug.pass.speed.toFixed(1)}m/s / 충전 {state.debug.pass.charge.toFixed(2)}s<br/>방향 {state.debug.pass.direction.x.toFixed(2)}, {state.debug.pass.direction.y.toFixed(2)}, {state.debug.pass.direction.z.toFixed(2)}<br/>발사 {state.debug.pass.position.x.toFixed(1)}, {state.debug.pass.position.y.toFixed(1)}, {state.debug.pass.position.z.toFixed(1)}</div>}<div>속도 {state.debug.speed.toFixed(1)}m/s · 접촉 {String(state.debug.touched)} · 이탈 {String(state.debug.exited)}</div><div>MOTION {state.debug.motion.player} / DUMMY {state.debug.motion.dummy}<br/>{state.debug.motion.locomotion} · 주기 {state.debug.motion.period.toFixed(2)}s · phase {state.debug.motion.phase.toFixed(2)}<br/>예약 {String(state.debug.motion.pending)} · 공 높이 {state.debug.motion.ballY.toFixed(2)}<br/>BALL MESH {state.debug.motion.ballCount} · JOINTS {state.debug.motion.playerJoints}/{state.debug.motion.dummyJoints}<br/>SOCKET ERROR {state.debug.motion.handError.toFixed(3)}m<br/>SHOT FORM {state.debug.motion.shooting.toFixed(2)} · KNEE {state.debug.motion.kneeBend.toFixed(2)}rad<br/>PLAYER Y {state.debug.motion.playerY.toFixed(2)}m<br/>HAND {state.debug.motion.hand} · CROSS {state.debug.motion.crossover}<br/>CROSS PROGRESS {state.debug.motion.crossProgress.toFixed(2)} · BODY YAW {state.debug.motion.bodyYaw.toFixed(2)}</div><small>파랑: 발 주변 / 노랑: 몸통 앞</small></aside>}
-  <div className="shot-hud"><div className="shot-caption"><span>{passing?'PASS POWER':state.phase==='CHARGING'?'HOLD → RELEASE':'SHOT TIMING'}</span><span>{passing?<>{Math.round(power*100)}<small>% · {passSpeed(state.passCharge).toFixed(1)} m/s</small></>:<>{state.distance.toFixed(1)} <small>M</small></>}</span></div><div className={`meter ${passing?'pass-power':''}`}>{!passing&&<span className="perfect-zone"/>}<span className="meter-fill" style={{width:`${power*100}%`}}/><span className="meter-marker" style={{left:`${power*100}%`}}/></div><div className="defense-status">{state.defense.result}{state.defense.cooldown>0&&` · 준비 ${state.defense.cooldown.toFixed(1)}s`}{state.practice.mode==='BLOCK'&&!state.practice.fired&&` · 슛 예고 ${Math.max(0,DEFENSE_PRACTICE.warningSeconds-state.practice.elapsed).toFixed(1)}s`}</div><div className={`feedback ${state.message.startsWith('SWISH')?'success':''}`}>{state.message}</div></div>
-  <footer><div className="controls"><span><kbd>E</kbd> 스크린</span><span><kbd>W A S D</kbd> 이동</span><span><kbd>Q</kbd> 드리블 손 전환</span><span><kbd>SPACE</kbd> 점프</span><span><kbd>{state.owner==='player'?'좌클 HOLD':'좌클'}</kbd> {state.owner==='player'?'슛':'스틸'}</span><span><kbd>{state.owner==='player'?'우클 누르기 → 놓기':'우클'}</kbd> {state.owner==='player'?'패스':'블록'}</span><span><kbd>SHIFT</kbd> 달리기</span><span><kbd>ESC</kbd> 일시정지</span></div><div className="build"><i/> OFFLINE PROTOTYPE <span>v0.1</span></div></footer>
-  {!state.locked&&!state.online?.match&&<div className="start-layer"><section className="start-card"><div className="card-top"><span className="eyebrow">PICK UP. PLAY.</span><span className="court-number">COURT 01 ↗</span></div><h2>한 번 더.<br/><em>이번엔 스위시.</em></h2><p>골대를 조준하고, 점프하고, 릴리스하세요.<br/>오직 당신과 골대만 있는 연습 시간.</p>{!session?<div className="online-connect"><strong>온라인 플레이</strong><label>방 만들기 모드 <select aria-label="방 모드" value={roomMode} onChange={e=>setRoomMode(e.target.value as RoomMode)}><option value="duel">1대1 경기</option><option value="practice">자유 연습</option></select></label><input aria-label="Nickname" placeholder="Nickname (optional)" maxLength={20} value={nickname} onChange={e=>setNickname(e.target.value)}/><input aria-label="Room ID" placeholder="참가할 Room ID" value={roomId} onChange={e=>setRoomId(e.target.value)}/><div><button disabled={joining} onClick={()=>void join(true)}>방 만들기</button><button disabled={joining} onClick={()=>void join(false)}>Room ID로 참가</button>{joining&&<button onClick={()=>{joinAttempt.current++;setJoining(false);}}>접속 취소</button>}</div><small>{joining?'서버 연결 중…':'오프라인은 아래 플레이 버튼으로 바로 시작합니다.'}</small></div>:<div className="online-connect"><strong>Room ID: <code>{session.room.roomId}</code></strong><span>{state.online?.connected===false?'연결 끊김':(state.online?.count??0)<2?'접속 완료 · 상대 대기':'접속 완료 · 상대 참가'} · {state.online?.status}</span><button onClick={leave}>온라인 나가기</button></div>}
- {!session&&<label className="scenario-select">오프라인 시나리오<select aria-label="오프라인 시나리오" value={state.practice.mode} onChange={e=>runtime.current?.scenario(e.target.value as PracticeMode)}>{Object.entries(modes).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>}
- <fieldset className="audio-settings" onPointerDown={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()}>
-  <legend>효과음</legend>
-  <label><input type="checkbox" checked={audioSettings.muted} onChange={e=>changeAudio({...audioSettings,muted:e.target.checked})}/> 음소거</label>
-  <label>전체 음량 <input aria-label="전체 음량" type="range" min="0" max="1" step="0.05" value={audioSettings.volume} onChange={e=>changeAudio({...audioSettings,volume:Number(e.target.value)})}/><output>{Math.round(audioSettings.volume*100)}%</output></label>
-  <button type="button" disabled={!ready} onClick={()=>runtime.current?.unlockAudio()}>오디오 활성화 / 다시 켜기</button>
-  <small>{state.audioReady?'오디오 준비됨':'플레이 또는 활성화 버튼으로 소리를 켜세요'}</small>
-  <a href="/assets/audio/ATTRIBUTIONS.md" target="_blank" rel="noreferrer">음원 출처·라이선스 전체 보기</a>
- </fieldset>
-<label className="camera-motion-setting"><input type="checkbox" checked={cameraMotionEnabled} disabled={!ready} onChange={e=>{setCameraMotionEnabled(e.target.checked);runtime.current?.setCameraMotion(e.target.checked);}}/> 카메라 흔들림</label><button className="retry" disabled={!ready||!!session} onClick={()=>runtime.current?.reset()}>현재 시나리오 재시도 · R</button><button className="play" disabled={!ready||!!error||joining||!!session&&!session.connected} onClick={()=>{setError('');runtime.current?.start();}}>{error?'실행을 확인해 주세요':ready?'코트에서 플레이':'코트 준비 중…'} <span>↗</span></button><div className="start-note">클릭하면 마우스가 잠깁니다 · Esc로 해제</div>{error&&<div role="alert" className="error">{error}<button onClick={()=>window.location.reload()}>다시 불러오기</button></div>}</section></div>}
-  {help&&<section className="help"><button className="close" onClick={()=>setHelp(false)}>닫기 ×</button><h2>플레이 가이드</h2><p>Q: 드리블 손 전환. 지상에서 공을 드리블할 때 다음 손 복귀 시점에 몸 앞 V자 크로스오버를 합니다. Q를 반복해서 누르면 좌우 크로스오버가 이어집니다. 전환 중 다음 방향을 한 번 예약할 수 있고, 슛/패스가 우선합니다.</p><p>마우스로 좌우를 조준하세요. 슛 높이는 보조됩니다.</p><p>좌클을 누르고 미터의 초록 구간에서 놓으세요. Space로 점프한 뒤 공중에서 릴리스할 수도 있어요.</p><p>{state.online?.match?'아크 안 2점 · 밖 3점.':'아크 안 1점 · 밖 2점.'} 슛 후 공에 다가가면 발 주변에서 줍거나 몸통 앞에서 바운드 중인 공을 잡습니다.</p><p>공을 소유한 상태에서 시선으로 조준하고 우클을 눌러 충전한 뒤 놓아 패스하세요. 길게 누르면 강해지며 위아래 방향과 포물선은 직접 조절합니다. 더미가 캐치하면 잠시 뒤 현재 위치로 반환 패스를 보냅니다. 움직여서 놓친 공은 가까이 가서 회수하세요. 공이 없으면 좌클 스틸, 우클 블록입니다. Esc로 메뉴를 열고 오프라인 시나리오를 바꿀 수 있습니다.</p></section>}
-  {state.online?.match&&<MatchPanel roomCode={state.online.roomId} match={state.online.match} players={state.online.players} selfId={state.online.selfId} remainingMs={state.online.remainingMs??0} locked={state.locked} connected={state.online.connected} onIntent={intent=>session?.matchIntent(intent)} onEnter={()=>runtime.current?.start()} onLeave={leave}/>}
-  <div className="mobile-note">데스크톱의 키보드와 마우스로 플레이해 주세요.</div>
+  <header className="topbar"><button className="brand brand-button" onClick={home} aria-label="CheckTheBall 첫 화면">◉ CheckTheBall<span className="brand-slash">/</span></button><div className="top-right">
+   {playing&&state.online&&<span className={`network-ping ${pingQuality}`} title={state.online.pingStatus} aria-label={ping==null?state.online.pingStatus:`핑 ${ping}ms`}>{ping??'--'}<small>ms</small></span>}
+   <button className="menu-utility" onClick={()=>openPanel('SETTINGS')}>설정</button><button className="menu-utility" onClick={()=>openPanel('HELP')}>조작 안내</button>
+  </div></header>
+  {playing&&state.locked&&panel==='MAIN'&&<GameHud state={state} onReset={()=>runtime.current?.reset()}/>}
+  {showCard&&<div className="menu-layer"><section className="menu-card" aria-label={panel==='SETTINGS'?'설정':panel==='HELP'?'조작 안내':panel==='CREDITS'?'크레딧':'시작 메뉴'}>
+   {panel==='SETTINGS'?<Settings audio={audio} camera={camera} onAudio={changeAudio} onCamera={changeCamera} onBack={()=>setPanel('MAIN')}/>:
+    panel==='HELP'?<Help online={!!session} onBack={()=>setPanel('MAIN')}/>:
+    panel==='CREDITS'?<Credits onBack={()=>setPanel('MAIN')}/>:
+    screen==='HOME'?<><span className="eyebrow">PICK UP. PLAY.</span><h1 tabIndex={-1} data-menu-title>내 코트, 내 리듬.</h1><p>친구와 한 판, 혼자서 한 번 더.<br/>가볍게 시작하는 1인칭 농구.</p>
+     <label className="nickname-field">게스트 닉네임<input aria-label="게스트 닉네임" aria-describedby="nickname-note nickname-error" aria-invalid={!!nicknameError} value={nickname} maxLength={NICKNAME_MAX} onChange={e=>{setNickname(e.target.value);setNicknameError('');}} onBlur={()=>{if(profileReady)saveName();}} autoComplete="nickname"/></label>
+     <small id="nickname-note">1~20자 · 표시 이름이며 로그인 없이 플레이합니다.</small><p id="nickname-error" className="menu-error" role={nicknameError?'alert':undefined}>{nicknameError}</p>
+     <button className="menu-primary" disabled={!profileReady} onClick={()=>navigate('FRIENDS')}>친구와 플레이</button><button className="menu-secondary" disabled={!profileReady} onClick={()=>navigate('PRACTICE_SELECT')}>혼자 연습</button><button className="menu-text" onClick={()=>setPanel('CREDITS')}>크레딧</button>
+    </>:
+    screen==='FRIENDS'||connecting?<><h2 tabIndex={-1} data-menu-title>친구와 플레이</h2><p>플레이어 · {nickname}</p><label className="menu-field">방 만들기 모드<select aria-label="방 모드" value={roomMode} disabled={connecting} onChange={e=>setRoomMode(e.target.value as RoomMode)}><option value="duel">1대1 경기 · 11점 선승</option><option value="practice">자유 연습</option></select></label>
+     <button className="menu-primary" disabled={connecting||!factoryReady} onClick={()=>void join(true)}>방 만들기</button><label className="menu-field">친구의 Room ID<input aria-label="Room ID" maxLength={64} value={roomId} disabled={connecting} onChange={e=>setRoomId(e.target.value)} autoComplete="off"/></label><button className="menu-secondary" disabled={connecting||!factoryReady} onClick={()=>void join(false)}>Room ID로 참가</button>
+     {connecting&&<p role="status">서버에 연결 중입니다…</p>}<button className="menu-text" onClick={back}>{connecting?'연결 취소 · 뒤로':'뒤로'}</button>
+    </>:
+    screen==='PRACTICE_SELECT'?<><h2 tabIndex={-1} data-menu-title>혼자 연습</h2>{chooser}<button className="menu-primary" disabled={!factoryReady} onClick={()=>launch(undefined,true)}>{factoryReady?'연습 시작':'코트 준비 중…'}</button><button className="menu-text" onClick={back}>뒤로</button></>:
+    <><h2 tabIndex={-1} data-menu-title>{hasPlayed?'플레이 메뉴':'코트 준비 완료'}</h2>{session?<><RoomInvite code={session.room.roomId}/><p>{state.online?.connected===false?'연결이 끊겼습니다.':(state.online?.count??0)<2?'친구가 참가하기를 기다립니다.':'친구가 참가했습니다.'}</p><p>온라인에서는 메뉴를 열어도 경기가 계속됩니다.</p></>:chooser}
+     <button className="menu-primary" disabled={!sceneReady||!!session&&!session.connected} onClick={enter}>{hasPlayed?'계속하기':'코트에서 플레이'}</button>{!session&&<button className="menu-secondary" onClick={()=>runtime.current?.reset()}>현재 연습 재시도</button>}
+     <button className="menu-secondary" onClick={()=>setPanel('SETTINGS')}>설정</button><button className="menu-text" onClick={()=>setPanel('HELP')}>조작 안내</button><button className="menu-text" onClick={home}>첫 화면으로 나가기</button>
+    </>}
+   {error&&<p className="menu-error" role="alert">{error}</p>}<p className="desktop-note">데스크톱 키보드와 마우스로 플레이해주세요. 모바일 조작은 지원하지 않습니다.</p>
+  </section></div>}
+  {playing&&state.online?.match&&panel==='MAIN'&&<MatchPanel error={error} roomCode={state.online.roomId} match={state.online.match} players={state.online.players} selfId={state.online.selfId} remainingMs={state.online.remainingMs??0} locked={state.locked} connected={state.online.connected} onIntent={intent=>session?.matchIntent(intent)} onEnter={enter} onLeave={home} onSettings={()=>openPanel('SETTINGS')} onHelp={()=>openPanel('HELP')}/>}
+  {playing&&state.audioFailed&&!audio.muted&&audio.volume>0&&<button className="audio-recovery" onClick={()=>runtime.current?.unlockAudio()}>소리가 켜지지 않았습니다 · 눌러서 다시 켜기</button>}
  </main>;
 }

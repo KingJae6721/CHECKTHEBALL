@@ -1,0 +1,10 @@
+import type {AudioSettings} from '../game/audioConfig';
+export function Settings({audio,camera,onAudio,onCamera,onBack}:{audio:AudioSettings;camera:boolean;onAudio:(v:AudioSettings)=>void;onCamera:(v:boolean)=>void;onBack:()=>void}){
+ return <><h2 tabIndex={-1} data-menu-title>설정</h2><fieldset className="menu-settings"><legend>소리와 화면</legend><label><input type="checkbox" checked={audio.muted} onChange={e=>onAudio({...audio,muted:e.target.checked})}/> 음소거</label><label>전체 음량 <input aria-label="전체 음량" type="range" min="0" max="1" step="0.05" value={audio.volume} onChange={e=>onAudio({...audio,volume:Number(e.target.value)})}/><output>{Math.round(audio.volume*100)}%</output></label><label><input type="checkbox" checked={camera} onChange={e=>onCamera(e.target.checked)}/> 카메라 흔들림</label></fieldset><button className="menu-secondary" onClick={onBack}>뒤로</button></>;
+}
+export function Help({online,onBack}:{online:boolean;onBack:()=>void}){
+ return <><h2 tabIndex={-1} data-menu-title>조작 안내</h2><dl className="menu-help"><dt>이동</dt><dd>WASD 이동 · Shift 달리기 · Space 점프</dd><dt>공을 가지고 있을 때</dt><dd>좌클 누르기 → 놓기: 슛<br/>우클 누르기 → 놓기: 시선 방향 패스<br/>Q: 드리블 손 전환</dd><dt>공이 없을 때</dt><dd>좌클: 스틸 · 우클: 블록<br/>E: 지상에서 스크린 유지, 이동하면 해제<br/>자유 공에 가까이 가면 회수</dd><dt>메뉴</dt><dd>Esc: 메뉴 열기{online?' · 온라인 경기는 계속 진행됩니다.':' · 혼자 연습은 메뉴에서 멈춥니다.'}<br/>R: 혼자 연습 재시도</dd></dl><p>데스크톱 키보드와 마우스가 필요합니다.</p><button className="menu-secondary" onClick={onBack}>뒤로</button></>;
+}
+export function Credits({onBack}:{onBack:()=>void}){
+ return <><h2 tabIndex={-1} data-menu-title>크레딧</h2><p>CheckTheBall · 브라우저 농구 게임</p><p>음원 출처·제작자·라이선스와 수정 내용은 아래 문서를 참고해주세요.</p><a className="menu-link" href="/assets/audio/ATTRIBUTIONS.md" target="_blank" rel="noreferrer">음원 출처·라이선스 전체 보기 ↗</a><button className="menu-secondary" onClick={onBack}>뒤로</button></>;
+}
