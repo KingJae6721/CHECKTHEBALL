@@ -64,9 +64,9 @@ test('dribble and crossover phase crossings sound once; gather and airborne do n
  a.motion.crossover.elapsed=CROSSOVER.duration*CROSSOVER.bounceFraction+.001;a.motion.clock=2.04;assert.equal(m.sample(a,160).filter(c=>c.kind==='dribble').length,1);
  a.position.y=.2;a.motion.clock=3;a.motion.action='DRIBBLE';a.motion.phase=.3;m.sample(a,180);a.motion.phase=.5;assert.equal(m.sample(a,200).length,0);
 });
-test('footsteps require actual grounded displacement; suspended tab never catches up old cycles',()=>{
+test('walking and running stay silent; suspended tab never catches up old cycles',()=>{
  const m=new MotionSounds(),a=actor();a.owns=false;m.sample(a,0);a.locomotion.phase=3.2;assert.equal(m.sample(a,20).length,0);
- a.locomotion.phase=6.2;a.locomotion.speed=3;a.locomotion.distance=.5;m.sample(a,40);a.locomotion.phase=.1;a.locomotion.distance=1;assert.equal(m.sample(a,60).filter(c=>c.kind==='step').length,1);
+ a.locomotion.phase=6.2;a.locomotion.speed=3;a.locomotion.distance=.5;m.sample(a,40);a.locomotion.phase=.1;a.locomotion.distance=1;assert.equal(m.sample(a,60).length,0);
  a.position.y=1;a.locomotion.phase=3.2;a.locomotion.distance=2;assert.equal(m.sample(a,80).length,0);
  a.position.y=0;a.locomotion.phase=.1;a.locomotion.distance=20;assert.equal(m.sample(a,2000).length,0);m.clear();assert.equal(m.sample(a,2020).length,0);
 });

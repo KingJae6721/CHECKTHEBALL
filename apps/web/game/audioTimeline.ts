@@ -27,13 +27,13 @@ export class AudioTimeline{
  get queued(){return this.pending.length;}
 }
 export type AudibleActor={id:string;position:Vec;vy:number;motion:BallMotion;locomotion:Locomotion;owns:boolean;near:boolean;block:boolean};
-type Previous={time:number;phase:number;clock:number;distance:number;gait:number;action:string;cross:number;crossActive:boolean;lastBounce:number;lastStep:number;air:boolean;serial:number};
+type Previous={time:number;phase:number;clock:number;action:string;cross:number;crossActive:boolean;lastBounce:number;air:boolean;serial:number};
 // Visual phase crossings only; prediction replay never invokes this collector.
 export class MotionSounds{
  private previous=new Map<string,Previous>();
  sample(a:AudibleActor,now:number,offline=false):SoundCue[]{
-  const m=a.motion,l=a.locomotion,p=this.previous.get(a.id),active=m.action==='CROSSOVER'&&m.crossover?.stage==='ACTIVE',cross=m.crossover?.elapsed??0,air=a.position.y>0||a.vy>0;
-  const next:Previous={time:now,phase:m.phase,clock:m.clock,distance:l.distance,gait:l.phase,action:m.action,cross,crossActive:!!active,lastBounce:p?.lastBounce??-Infinity,lastStep:p?.lastStep??-Infinity,air,serial:p?.serial??0};
+  const m=a.motion,p=this.previous.get(a.id),active=m.action==='CROSSOVER'&&m.crossover?.stage==='ACTIVE',cross=m.crossover?.elapsed??0,air=a.position.y>0||a.vy>0;
+  const next:Previous={time:now,phase:m.phase,clock:m.clock,action:m.action,cross,crossActive:!!active,lastBounce:p?.lastBounce??-Infinity,air,serial:p?.serial??0};
   this.previous.set(a.id,next);if(!p||now-p.time>AUDIO.maxMotionGapMs||now<p.time)return [];
   const cues:SoundCue[]=[];
   const push=(kind:SoundKind,strength:number)=>cues.push({key:`visual:${a.id}:${++next.serial}`,actorId:a.id,kind,position:{...a.position},strength,near:a.near});
@@ -41,9 +41,6 @@ export class MotionSounds{
   const normal=m.action==='DRIBBLE'&&p.action==='DRIBBLE'&&crossed(m.phase,p.phase,DRIBBLE.pushFraction);
   const crossover=active&&p.crossActive&&p.cross<CROSSOVER.duration*CROSSOVER.bounceFraction&&cross>=CROSSOVER.duration*CROSSOVER.bounceFraction;
   if(a.owns&&!air&&(normal||crossover)&&m.clock-next.lastBounce>.22){push('dribble',1);next.lastBounce=m.clock;}
-  // Gait phase runs in radians and is advanced by actual post-collision displacement.
-  const foot=(Math.floor(l.phase/Math.PI)!==Math.floor(p.gait/Math.PI));
-  if(!air&&l.speed>.1&&l.distance>p.distance&&l.distance-next.lastStep>.12&&foot){push('step',.65+.35*l.run);next.lastStep=l.distance;}
   if(offline&&air&&!p.air)push(a.block?'blockJump':'jump',1);
   if(offline&&!air&&p.air)push('land',1);
   return cues;

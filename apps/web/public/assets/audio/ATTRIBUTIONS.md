@@ -48,9 +48,9 @@ the seven user-supplied swish variations listed below.
 - Source and deployed WAV may be shared under CC BY 4.0; preserve this attribution/license notice.
 - Used only for confirmed baskets, not passes. The same recording currently serves clean and contact baskets.
 
-## Synthetic temporary effects (5)
+## Synthetic temporary effects (4)
 
-`step.wav`, `jump.wav`, `land.wav`,
+`jump.wav`, `land.wav`,
 `block-jump.wav`, `block-hit.wav`: generated for this project by
 `scripts/prepare-audio.py` from deterministic oscillators/noise/envelopes.
 These contain no external samples and are project-generated assets, not real basketball recordings.

@@ -7,7 +7,6 @@ export const AUDIO = {
     lateMs: 180, maxWaitMs: 1000, maxQueued: 128, maxSeen: 512, seenMs: 5000, maxMotionGapMs: 220,
     effects: {
         dribble: { files: bounceFiles, gain: .75, interval: 160 }, floor: { files: bounceFiles, gain: .75, interval: 65 },
-        step: { files: ['step.wav'], gain: .45, interval: 150 },
         rim: { files: rimFiles, gain: .65, interval: 65 },
         board: { files: ['board.wav'], gain: .65, interval: 65 }, net: { files: swishFiles, gain: .5, interval: 100 },
         jump: { files: ['jump.wav'], gain: .35, interval: 200 }, land: { files: ['land.wav'], gain: .5, interval: 200 },

@@ -48,7 +48,7 @@ for group,count in [('bounce',5),('rim',5),('swish',7)]:
             raise FileNotFoundError('Missing audio variation: ' + str(source))
 
 # Original procedural placeholders, NOT recordings of basketball equipment/shoes.
-specs={'step':(.10,90,32,.3),'jump':(.13,0,18,1),'land':(.15,75,25,.35),
+specs={'jump':(.13,0,18,1),'land':(.15,75,25,.35),
        'block-jump':(.16,0,16,1),'block-hit':(.12,130,25,.6)}
 for seed,(name,(seconds,freq,decay,noise)) in enumerate(specs.items()):
     if (out / (name+'.wav')).exists():
