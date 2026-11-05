@@ -78,3 +78,17 @@ test('future sound reservations expire on wall time and old event IDs never retu
  q.ingest([event(1,10000)],1200);assert.equal(q.queued,0);
  q.ingest([event(1,10000)],7000);assert.equal(q.queued,0);
 });
+test('a new catch resets old dribble debounce and sounds on the first new floor crossing',()=>{
+ const sounds=new MotionSounds(),a=actor();a.motion.clock=20;a.motion.phase=.42;sounds.sample(a,0);
+ a.motion.clock=20.02;a.motion.phase=.44;assert.equal(sounds.sample(a,20).length,1);
+ a.owns=false;a.motion.action='IDLE';a.motion.clock=20.04;sounds.sample(a,40);
+ a.owns=true;a.motion.action='CATCH';a.motion.clock=0;a.motion.phase=0;assert.equal(sounds.sample(a,60).length,0);
+ a.motion.action='DRIBBLE';a.motion.clock=.3;a.motion.phase=.42;sounds.sample(a,80);
+ a.motion.clock=.32;a.motion.phase=.44;assert.equal(sounds.sample(a,100).filter(c=>c.kind==='dribble').length,1);
+});
+test('a fixed dummy at floor height is grounded and audible while airborne actors stay silent',()=>{
+ const sounds=new MotionSounds(),a=actor();a.id='dummy';a.near=false;a.position.y=COURT.floorY;a.grounded=true;a.motion.clock=1;a.motion.phase=.42;sounds.sample(a,0);
+ a.motion.clock=1.02;a.motion.phase=.44;assert.equal(sounds.sample(a,20).filter(c=>c.kind==='dribble').length,1);
+ a.grounded=false;a.motion.clock=2;a.motion.phase=.42;sounds.sample(a,40);
+ a.motion.clock=2.02;a.motion.phase=.44;assert.equal(sounds.sample(a,60).length,0);
+});

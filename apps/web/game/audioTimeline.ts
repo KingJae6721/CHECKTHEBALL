@@ -26,15 +26,18 @@ export class AudioTimeline{
  discard(){this.pending.length=0;}
  get queued(){return this.pending.length;}
 }
-export type AudibleActor={id:string;position:Vec;vy:number;motion:BallMotion;locomotion:Locomotion;owns:boolean;near:boolean;block:boolean};
-type Previous={time:number;phase:number;clock:number;action:string;cross:number;crossActive:boolean;lastBounce:number;air:boolean;serial:number};
+export type AudibleActor={id:string;position:Vec;vy:number;motion:BallMotion;locomotion:Locomotion;owns:boolean;near:boolean;block:boolean;grounded?:boolean};
+type Previous={time:number;phase:number;clock:number;action:string;cross:number;crossActive:boolean;lastBounce:number;air:boolean;serial:number;owns:boolean};
 // Visual phase crossings only; prediction replay never invokes this collector.
 export class MotionSounds{
  private previous=new Map<string,Previous>();
  sample(a:AudibleActor,now:number,offline=false):SoundCue[]{
-  const m=a.motion,p=this.previous.get(a.id),active=m.action==='CROSSOVER'&&m.crossover?.stage==='ACTIVE',cross=m.crossover?.elapsed??0,air=a.position.y>0||a.vy>0;
-  const next:Previous={time:now,phase:m.phase,clock:m.clock,action:m.action,cross,crossActive:!!active,lastBounce:p?.lastBounce??-Infinity,air,serial:p?.serial??0};
-  this.previous.set(a.id,next);if(!p||now-p.time>AUDIO.maxMotionGapMs||now<p.time)return [];
+  const m=a.motion,p=this.previous.get(a.id),active=m.action==='CROSSOVER'&&m.crossover?.stage==='ACTIVE',cross=m.crossover?.elapsed??0,air=!(a.grounded??(a.position.y<=0&&a.vy<=0));
+  // A new possession/catch resets the motion clock. Old bounce timestamps must not
+  // silence the new dribble; small snapshot corrections still keep their debounce.
+  const restarted=!p||(a.owns&&!p.owns)||m.clock<p.clock-.1||(m.action==='CATCH'&&p.action!=='CATCH');
+  const next:Previous={time:now,phase:m.phase,clock:m.clock,action:m.action,cross,crossActive:!!active,lastBounce:restarted?-Infinity:(p?.lastBounce??-Infinity),air,serial:p?.serial??0,owns:a.owns};
+  this.previous.set(a.id,next);if(!p||restarted||now-p.time>AUDIO.maxMotionGapMs||now<p.time)return [];
   const cues:SoundCue[]=[];
   const push=(kind:SoundKind,strength:number)=>cues.push({key:`visual:${a.id}:${++next.serial}`,actorId:a.id,kind,position:{...a.position},strength,near:a.near});
   const crossed=(phase:number,old:number,mark:number)=>phase>=old?old<mark&&phase>=mark:old<mark||phase>=mark;

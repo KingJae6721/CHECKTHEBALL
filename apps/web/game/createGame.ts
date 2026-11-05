@@ -149,10 +149,10 @@ export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,
  audioTimeline.ingest(online?.latest?.events??state.events.recent,now);
  if(locked&&!document.hidden){
   for(const event of audioTimeline.drain(eventTime,selfTime,selfId))audio.play({key:`event:${event.eventId}`,actorId:event.actorId??undefined,kind:event.kind,position:event.position,strength:event.strength,near:event.actorId===selfId&&(event.kind==='jump'||event.kind==='land'||event.kind==='blockJump'||event.kind==='catch')},camera.position,input.yaw,now);
-  const audible=[{id:selfId,position:state.player,vy:state.vy,motion:state.playerMotion,locomotion:state.locomotion,owns:state.owner==='player',near:true,block:state.defense.kind==='BLOCK'}];
+  const audible=[{id:selfId,position:state.player,vy:state.vy,motion:state.playerMotion,locomotion:state.locomotion,owns:state.owner==='player',grounded:state.player.y===0&&state.vy===0,near:true,block:state.defense.kind==='BLOCK'}];
   const remote=onlineFrame?.players.find(a=>a.id!==selfId);
-  if(remote)audible.push({id:remote.id,position:remote.position,vy:remote.vy,motion:remote.motion,locomotion:remote.locomotion,owns:onlineFrame?.ownerId===remote.id,near:false,block:remote.defense.kind==='BLOCK'});
-  if(!online)audible.push({id:'dummy',position:DUMMY.position,vy:0,motion:state.dummyMotion,locomotion:dummyLocomotion,owns:state.owner==='dummy',near:false,block:false});
+  if(remote)audible.push({id:remote.id,position:remote.position,vy:remote.vy,motion:remote.motion,locomotion:remote.locomotion,owns:onlineFrame?.ownerId===remote.id,grounded:remote.position.y===0&&remote.vy===0,near:false,block:remote.defense.kind==='BLOCK'});
+  if(!online)audible.push({id:'dummy',position:DUMMY.position,vy:0,motion:state.dummyMotion,locomotion:dummyLocomotion,owns:state.owner==='dummy',grounded:true,near:false,block:false});
   motionSounds.retain(audible.map(a=>a.id));for(const actor of audible)for(const cue of motionSounds.sample(actor,now,!online))audio.play(cue,camera.position,input.yaw,now);
  }else{audioTimeline.discard();motionSounds.clear();}
  scene.render();frameDiagnostics.end(performance.now(),camera.rotation.y,camera.rotation.x,input.yaw,input.pitch);online?.recordFrame(frameDiagnostics.lastFrameMs,performance.now()-now);if(now-lastUI>50){update();lastUI=now;}});
