@@ -1,0 +1,330 @@
+{
+  "conditions": {
+    "width": 1264,
+    "height": 805,
+    "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002487) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "shadows": false,
+    "postprocessing": false,
+    "sampleMs": 2000,
+    "source": "isolated production esbuild preview",
+    "gpuMs": "not measured"
+  },
+  "results": [
+    {
+      "config": {
+        "appearance": "legacy",
+        "count": 1,
+        "pose": "DRIBBLE_RIGHT",
+        "view": "front",
+        "pitch": 0,
+        "paused": false,
+        "time": 0
+      },
+      "frames": 289,
+      "frameMs": {
+        "count": 289,
+        "p50": 6.900000095367432,
+        "p95": 7.100000023841858,
+        "max": 7.300000071525574
+      },
+      "renderCpuMs": {
+        "count": 289,
+        "p50": 0.3999999761581421,
+        "p95": 0.5,
+        "max": 0.7000000476837158
+      },
+      "drawCalls": 26,
+      "characterMeshes": 24,
+      "enabledCharacterMeshes": 24,
+      "materials": 4,
+      "verticesInstanced": 4353,
+      "trianglesInstanced": 7320,
+      "uniqueGeometryVertices": 4353,
+      "bones": 0,
+      "handError": 8.561650677993645e-8,
+      "gpuTimeMs": null,
+      "gpuTimeNote": "not measured"
+    },
+    {
+      "config": {
+        "appearance": "minimal",
+        "count": 1,
+        "pose": "DRIBBLE_RIGHT",
+        "view": "front",
+        "pitch": 0,
+        "paused": false,
+        "time": 0
+      },
+      "frames": 289,
+      "frameMs": {
+        "count": 289,
+        "p50": 6.900000095367432,
+        "p95": 7.100000023841858,
+        "max": 7.200000047683716
+      },
+      "renderCpuMs": {
+        "count": 289,
+        "p50": 0.20000004768371582,
+        "p95": 0.30000007152557373,
+        "max": 0.5
+      },
+      "drawCalls": 5,
+      "characterMeshes": 3,
+      "enabledCharacterMeshes": 3,
+      "materials": 1,
+      "verticesInstanced": 844,
+      "trianglesInstanced": 1644,
+      "uniqueGeometryVertices": 844,
+      "bones": 21,
+      "handError": 8.561650677993645e-8,
+      "gpuTimeMs": null,
+      "gpuTimeNote": "not measured"
+    },
+    {
+      "config": {
+        "appearance": "hidden",
+        "count": 1,
+        "pose": "DRIBBLE_RIGHT",
+        "view": "front",
+        "pitch": 0,
+        "paused": false,
+        "time": 0
+      },
+      "frames": 290,
+      "frameMs": {
+        "count": 290,
+        "p50": 6.900000095367432,
+        "p95": 7.100000023841858,
+        "max": 7.299999952316284
+      },
+      "renderCpuMs": {
+        "count": 290,
+        "p50": 0.10000002384185791,
+        "p95": 0.20000004768371582,
+        "max": 0.30000007152557373
+      },
+      "drawCalls": 2,
+      "characterMeshes": 3,
+      "enabledCharacterMeshes": 0,
+      "materials": 1,
+      "verticesInstanced": 844,
+      "trianglesInstanced": 1644,
+      "uniqueGeometryVertices": 844,
+      "bones": 21,
+      "handError": 8.561650677993645e-8,
+      "gpuTimeMs": null,
+      "gpuTimeNote": "not measured"
+    },
+    {
+      "config": {
+        "appearance": "legacy",
+        "count": 2,
+        "pose": "DRIBBLE_RIGHT",
+        "view": "front",
+        "pitch": 0,
+        "paused": false,
+        "time": 0
+      },
+      "frames": 290,
+      "frameMs": {
+        "count": 290,
+        "p50": 6.900000095367432,
+        "p95": 7.100000023841858,
+        "max": 7.5
+      },
+      "renderCpuMs": {
+        "count": 290,
+        "p50": 0.40000009536743164,
+        "p95": 0.6000000238418579,
+        "max": 1
+      },
+      "drawCalls": 51,
+      "characterMeshes": 48,
+      "enabledCharacterMeshes": 48,
+      "materials": 8,
+      "verticesInstanced": 8706,
+      "trianglesInstanced": 14640,
+      "uniqueGeometryVertices": 8706,
+      "bones": 0,
+      "handError": 9.069437735189384e-8,
+      "gpuTimeMs": null,
+      "gpuTimeNote": "not measured"
+    },
+    {
+      "config": {
+        "appearance": "minimal",
+        "count": 2,
+        "pose": "DRIBBLE_RIGHT",
+        "view": "front",
+        "pitch": 0,
+        "paused": false,
+        "time": 0
+      },
+      "frames": 289,
+      "frameMs": {
+        "count": 289,
+        "p50": 6.900000095367432,
+        "p95": 7.100000023841858,
+        "max": 7.300000071525574
+      },
+      "renderCpuMs": {
+        "count": 289,
+        "p50": 0.20000004768371582,
+        "p95": 0.3999999761581421,
+        "max": 0.5
+      },
+      "drawCalls": 9,
+      "characterMeshes": 6,
+      "enabledCharacterMeshes": 6,
+      "materials": 1,
+      "verticesInstanced": 1688,
+      "trianglesInstanced": 3288,
+      "uniqueGeometryVertices": 844,
+      "bones": 42,
+      "handError": 8.931282172607071e-8,
+      "gpuTimeMs": null,
+      "gpuTimeNote": "not measured"
+    },
+    {
+      "config": {
+        "appearance": "hidden",
+        "count": 2,
+        "pose": "DRIBBLE_RIGHT",
+        "view": "front",
+        "pitch": 0,
+        "paused": false,
+        "time": 0
+      },
+      "frames": 289,
+      "frameMs": {
+        "count": 289,
+        "p50": 6.900000095367432,
+        "p95": 7.100000023841858,
+        "max": 7.5
+      },
+      "renderCpuMs": {
+        "count": 289,
+        "p50": 0.10000002384185791,
+        "p95": 0.20000004768371582,
+        "max": 0.7000000476837158
+      },
+      "drawCalls": 3,
+      "characterMeshes": 6,
+      "enabledCharacterMeshes": 0,
+      "materials": 1,
+      "verticesInstanced": 1688,
+      "trianglesInstanced": 3288,
+      "uniqueGeometryVertices": 844,
+      "bones": 42,
+      "handError": 8.931282172607071e-8,
+      "gpuTimeMs": null,
+      "gpuTimeNote": "not measured"
+    },
+    {
+      "config": {
+        "appearance": "legacy",
+        "count": 8,
+        "pose": "DRIBBLE_RIGHT",
+        "view": "front",
+        "pitch": 0,
+        "paused": false,
+        "time": 0
+      },
+      "frames": 289,
+      "frameMs": {
+        "count": 289,
+        "p50": 6.900000095367432,
+        "p95": 7.100000023841858,
+        "max": 7.299999952316284
+      },
+      "renderCpuMs": {
+        "count": 289,
+        "p50": 0.8999999761581421,
+        "p95": 1.2999999523162842,
+        "max": 1.600000023841858
+      },
+      "drawCalls": 201,
+      "characterMeshes": 192,
+      "enabledCharacterMeshes": 192,
+      "materials": 32,
+      "verticesInstanced": 34824,
+      "trianglesInstanced": 58560,
+      "uniqueGeometryVertices": 34824,
+      "bones": 0,
+      "handError": 4.1955600617064987e-7,
+      "gpuTimeMs": null,
+      "gpuTimeNote": "not measured"
+    },
+    {
+      "config": {
+        "appearance": "minimal",
+        "count": 8,
+        "pose": "DRIBBLE_RIGHT",
+        "view": "front",
+        "pitch": 0,
+        "paused": false,
+        "time": 0
+      },
+      "frames": 288,
+      "frameMs": {
+        "count": 288,
+        "p50": 6.900000095367432,
+        "p95": 7.100000023841858,
+        "max": 7.600000023841858
+      },
+      "renderCpuMs": {
+        "count": 288,
+        "p50": 0.3999999761581421,
+        "p95": 0.5999999046325684,
+        "max": 0.6999999284744263
+      },
+      "drawCalls": 33,
+      "characterMeshes": 24,
+      "enabledCharacterMeshes": 24,
+      "materials": 1,
+      "verticesInstanced": 6752,
+      "trianglesInstanced": 13152,
+      "uniqueGeometryVertices": 844,
+      "bones": 168,
+      "handError": 4.1955600617064987e-7,
+      "gpuTimeMs": null,
+      "gpuTimeNote": "not measured"
+    },
+    {
+      "config": {
+        "appearance": "hidden",
+        "count": 8,
+        "pose": "DRIBBLE_RIGHT",
+        "view": "front",
+        "pitch": 0,
+        "paused": false,
+        "time": 0
+      },
+      "frames": 289,
+      "frameMs": {
+        "count": 289,
+        "p50": 6.900000095367432,
+        "p95": 7.099999904632568,
+        "max": 7.199999928474426
+      },
+      "renderCpuMs": {
+        "count": 289,
+        "p50": 0.19999992847442627,
+        "p95": 0.30000007152557373,
+        "max": 0.40000009536743164
+      },
+      "drawCalls": 9,
+      "characterMeshes": 24,
+      "enabledCharacterMeshes": 0,
+      "materials": 1,
+      "verticesInstanced": 6752,
+      "trianglesInstanced": 13152,
+      "uniqueGeometryVertices": 844,
+      "bones": 168,
+      "handError": 4.1955600617064987e-7,
+      "gpuTimeMs": null,
+      "gpuTimeNote": "not measured"
+    }
+  ],
+  "errors": []
+}

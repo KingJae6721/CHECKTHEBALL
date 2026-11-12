@@ -11,6 +11,11 @@
 온라인 경기는 메뉴를 열어도 계속됩니다.
 [메뉴·저장·수명 관리와 검증 문서](docs/menu-flow.md)를 참고하세요.
 
+캐릭터는 기존 관절·모션을 유지하는 코드 생성 GPU 스킨을 사용합니다.
+[골격 규약·재현·검증](docs/character-rig.md), [기존/신규 비교 캡처](docs/character-preview/README.md)를 참고하세요.
+개발용 `/character-preview/`에서 모션/외형과 1·2·8명 렌더를 비교할 수 있습니다.
+일반 첫 화면에는 개발용 외형 선택 UI를 추가하지 않았습니다.
+
 ## 실행
 
 Node.js 24와 npm을 사용합니다. npm 패키지 이름은 `check-the-ball`이며, 의존성은 루트 `package.json`과 `package-lock.json`에서 관리합니다. Windows PowerShell에서도 아래 명령을 사용합니다. PowerShell 실행 정책으로 `npm.ps1` 실행이 차단되면 `npm` 대신 `npm.cmd`를 사용하세요.

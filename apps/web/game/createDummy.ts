@@ -1,12 +1,12 @@
 import {fixedPeople,isBodyCollisionPractice} from '../../../packages/game-core/src/bodies';
-import { createCharacter } from './createCharacter';
+import { createCharacter,type CharacterAppearance } from './createCharacter';
 import { characterPose } from '../../../packages/game-core/src/motion';
 import { Color3, DynamicTexture, Mesh, MeshBuilder, Scene, StandardMaterial } from '@babylonjs/core';
 import { DUMMY, COURT } from '../../../packages/game-core/src/court';
 import { zeroInput, type State } from '../../../packages/game-core/src/simulation';
 
-export function createDummy(scene: Scene) {
-  const character=createCharacter(scene,{name:'dummy',firstPerson:false});
+export function createDummy(scene: Scene,appearance:CharacterAppearance='minimal') {
+  const character=createCharacter(scene,{name:'dummy',firstPerson:false,appearance});
   const markerMaterial=new StandardMaterial('partner-marker',scene);markerMaterial.diffuseColor=Color3.FromHexString('#c7e89c');markerMaterial.emissiveColor=markerMaterial.diffuseColor.scale(.4);
   const marker=MeshBuilder.CreateTorus('partner-floor-marker',{diameter:DUMMY.markerRadius*2,thickness:DUMMY.markerThickness,tessellation:48},scene);marker.position.set(DUMMY.position.x,COURT.floorY+.02,DUMMY.position.z);marker.material=markerMaterial;
   const labelTexture=new DynamicTexture('partner-name',{width:512,height:96},scene,false);labelTexture.hasAlpha=true;labelTexture.drawText('PASS PARTNER',null,64,'bold 42px sans-serif','#eaf2d5','transparent',true);

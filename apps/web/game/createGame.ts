@@ -16,7 +16,7 @@ import {createButtons} from '../../../packages/game-core/src/buttons';
 import {defenseStage,defenseHand} from '../../../packages/game-core/src/defense';
 import {selectPractice,type PracticeMode} from '../../../packages/game-core/src/practice';
 import { requestCrossover } from '../../../packages/game-core/src/motion';
-import { createCharacter } from './createCharacter';
+import { createCharacter,type CharacterAppearance } from './createCharacter';
 import { controlledPosition, characterPose } from '../../../packages/game-core/src/motion';
 import { acquisitionVolumes } from '../../../packages/game-core/src/acquisition';
 import { createDummy } from './createDummy';
@@ -27,6 +27,7 @@ export type Snapshot = Pick<State,'score'|'attempts'|'made'|'phase'|'charge'|'me
 const liveRuntimes=new WeakMap<HTMLCanvasElement,number>();
 export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,onError:(s:string)=>void,online?:OnlineSession) {
  const frameDiagnostics=new FrameDiagnostics();const productionDiagnostics=new URLSearchParams(window.location.search).get('diagnostics')==='1';let performanceVisible=false,audioFailed=false;
+ const appearance:CharacterAppearance=(process.env.NODE_ENV==='development'||productionDiagnostics)&&new URLSearchParams(window.location.search).get('character')==='legacy'?'legacy':'minimal';
  const audio=new AudioManager(),dummyLocomotion=createLocomotion();let audioTimeline=new AudioTimeline();const motionSounds=new MotionSounds();
  const clearAudio=()=>{audio.stop();audioTimeline.discard();motionSounds.clear();};
  const engine=new Engine(canvas,true,{preserveDrawingBuffer:false,stencil:true});engine.setHardwareScalingLevel(Math.max(1,window.devicePixelRatio/1.6));
@@ -88,10 +89,10 @@ export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,
   for(let i=0;i<12;i++){const cylinder=MeshBuilder.CreateCylinder('body-cylinder-'+i,{height:BODY.height,diameter:BODY.radius*2,tessellation:24},scene);cylinder.material=material;cylinder.isPickable=false;cylinder.setEnabled(false);bodyMeshes.push(cylinder);debugMeshes.push(cylinder);const ring=MeshBuilder.CreateTorus('body-radius-'+i,{diameter:BODY.radius*2,thickness:.012,tessellation:32},scene);ring.material=material;ring.isPickable=false;ring.setEnabled(false);bodyRings.push(ring);debugMeshes.push(ring);}
   for(let i=0;i<=BODY.iterations;i++){const ray=MeshBuilder.CreateLines('body-contact-'+i,{points:[Vector3.Zero(),new Vector3(0,0,.001)],updatable:true},scene);ray.color=i===BODY.iterations?new Color3(1,.3,.2):new Color3(.3,1,.6);ray.isPickable=false;ray.setEnabled(false);bodyNormals.push(ray);debugMeshes.push(ray);}
  }
- const fixedCharacters=Array.from({length:online?0:2},(_,i)=>createCharacter(scene,{name:'fixed-screen-'+i,firstPerson:false}));for(const rig of fixedCharacters)rig.root.setEnabled(false);
- const dummy=online?null:createDummy(scene);
- const opponent=online?createCharacter(scene,{name:'remote-player',firstPerson:false}):null;opponent?.root.setEnabled(false);
- const playerCharacter=createCharacter(scene,{name:'player',firstPerson:true});
+ const fixedCharacters=Array.from({length:online?0:2},(_,i)=>createCharacter(scene,{name:'fixed-screen-'+i,firstPerson:false,appearance}));for(const rig of fixedCharacters)rig.root.setEnabled(false);
+ const dummy=online?null:createDummy(scene,appearance);
+ const opponent=online?createCharacter(scene,{name:'remote-player',firstPerson:false,appearance}):null;opponent?.root.setEnabled(false);
+ const playerCharacter=createCharacter(scene,{name:'player',firstPerson:true,appearance});
  let debugVisible=false,onlineFrame:WorldSnapshot|undefined;
  const remoteView=createState();
  let state=createState(), input=zeroInput(), locked=false, disposed=false, accumulator=0,last=performance.now(),lastUI=0,lastDebugUI=0;let uiKey='';let lastMatchEpoch=-1,lastMatchId=-1;
