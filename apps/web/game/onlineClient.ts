@@ -1,6 +1,7 @@
 import {matchPlayable,type MatchIntent,type RoomMode} from '../../../packages/game-core/src/match';
 import {Samples} from '../../../packages/protocol/src/diagnostics';
 import {MovementPrediction} from './movementPrediction';
+import {RoomChatClient} from './roomChatClient';
 import {Client,type Room} from '@colyseus/sdk';
 import {NETWORK,type Action} from '../../../packages/protocol/src/index';
 import type {WorldSnapshot,ActorSnapshot} from '../../../packages/protocol/src/index';
@@ -10,6 +11,7 @@ const angle=(a:number,b:number,t:number)=>a+Math.atan2(Math.sin(b-a),Math.cos(b-
 const vector=(a:{x:number;y:number;z:number},b:typeof a,t:number)=>({x:mix(a.x,b.x,t),y:mix(a.y,b.y,t),z:mix(a.z,b.z,t)});
 // Self: fixed-step prediction + authority replay. Remotes/ball: delayed snapshots.
 export class OnlineSession{
+ readonly chat:RoomChatClient;
  frames:WorldSnapshot[]=[];seq=0;connected=true;status='접속 완료';
  readonly prediction=new MovementPrediction();moveSequence=0;droppedSnapshots=0;
  private lastPump=0;private accumulator=0;private pendingJump=false;private barrier=0;private phaseOverride:{slow:boolean;seq:number}|undefined;
@@ -41,10 +43,11 @@ export class OnlineSession{
  recordFrame(frameMs:number,renderMs:number){this.frameMs=frameMs;this.renderMs=renderMs;if(frameMs>=50)this.record('longFrame');}
  exportDiagnostics(){return {exportedAt:new Date().toISOString(),metrics:this.metrics(),cancelCounts:{...this.cancelCounts},trace:this.trace};}
  constructor(readonly room:Room){
+  this.chat=new RoomChatClient(room);
   if(typeof room.onMessage==='function')this.removePong=room.onMessage('diagnosticPong',this.pong);room.reconnection.enabled=false;room.onDrop(this.drop);room.onLeave(this.drop);room.onError(this.error);
   room.onStateChange(this.receive);if(room.state?.frame)this.receive(room.state);
  }
- private drop=()=>{this.connected=false;if(!this.status.startsWith('통신 규약'))this.status='연결 끊김 · 새 참가로 다시 접속하세요';this.prediction.pending.length=0;this.prediction.clearOffset();};
+ private drop=()=>{this.connected=false;this.chat.setConnected(false);if(!this.status.startsWith('통신 규약'))this.status='연결 끊김 · 새 참가로 다시 접속하세요';this.prediction.pending.length=0;this.prediction.clearOffset();};
  private error=(_code:number,message?:string)=>{this.status=message??'연결 오류';};
  get latest(){return this.frames.at(-1);}
  get self(){return this.prediction.actor;}
@@ -54,7 +57,7 @@ export class OnlineSession{
  get ownsBall(){return this.latest?.ownerId===this.room.sessionId;}
  receive=(state:{frame:string})=>{
   if(!state.frame||this.closed)return;const frame=JSON.parse(state.frame) as WorldSnapshot,last=this.latest;
-  if(frame.protocolVersion!==NETWORK.protocolVersion){this.connected=false;this.status=`통신 규약 불일치: 웹 v${NETWORK.protocolVersion} / 서버 ${frame.protocolVersion===undefined?'버전 없음(이전 서버)':'v'+frame.protocolVersion}. 같은 포트의 이전 게임 서버 또는 오래된 dist 실행 여부를 확인하세요.`;if(this.room.connection?.isOpen)void this.room.leave();return;}
+  if(frame.protocolVersion!==NETWORK.protocolVersion){this.connected=false;this.chat.setConnected(false);this.status=`통신 규약 불일치: 웹 v${NETWORK.protocolVersion} / 서버 ${frame.protocolVersion===undefined?'버전 없음(이전 서버)':'v'+frame.protocolVersion}. 같은 포트의 이전 게임 서버 또는 오래된 dist 실행 여부를 확인하세요.`;if(this.room.connection?.isOpen)void this.room.leave();return;}
   if(last&&(frame.tick<=last.tick||frame.time<=last.time)){this.droppedSnapshots++;return;}
   const boundary=!!frame.match&&(!last?.match||frame.match.epoch!==last.match.epoch);
   if(boundary){this.frames.length=0;this.renderTime=-Infinity;this.renderBase=-1;this.renderFrame=undefined;this.pendingJump=false;this.phaseOverride=undefined;this.barrier=0;this.lastPump=0;this.accumulator=0;}
@@ -127,7 +130,7 @@ export class OnlineSession{
   return `WS RTT p50 ${fmt(metrics.rttMs.p50)} p95 ${fmt(metrics.rttMs.p95)}ms / variation p95 ${fmt(metrics.rttVariationMs.p95)}ms (${metrics.pingSupported?'game WS':'server update required'})\nSNAP gap p50 ${fmt(metrics.snapshotGapMs.p50)} p95 ${fmt(metrics.snapshotGapMs.p95)}ms / buffer ${fmt(this.bufferAheadMs)}ms / underruns ${this.underflowCount}\nSERVER tick p95 ${fmt(metrics.serverTiming?.tickP95Ms)}ms / schedule p95 ${fmt(metrics.serverTiming?.scheduleP95Ms)}ms / debt ${fmt(metrics.serverTiming?.debtMs)}ms\nRATE generated ${this.rates.generatedPerSecond.toFixed(1)}/s received ${this.rates.receivedPerSecond.toFixed(1)}/s consumed ${this.rates.consumedPerSecond.toFixed(1)}/s\nCANCEL/SYNC ${JSON.stringify(this.cancelCounts)}\nSERVER queue ${server?.net.queueLength??0} age ${server?.net.oldestAgeMs.toFixed(0)??0}ms consumed ${server?.net.consumed??0} discarded ${server?.net.discarded??0} timeouts ${server?.net.timeouts??0}\nTICK CPU ${this.latest?.serverTiming?.tickMs.toFixed(2)??'-'}ms max ${this.latest?.serverTiming?.maxTickMs.toFixed(2)??'-'}ms\nNET tick ${this.latest?.tick??'-'} · processedInput ${a?.processedInputSeq??'-'} · processedMove ${a?.processedMoveSeq??'-'}\nPENDING ${p.pending.length} · receiveSeq ${a?.ack??'-'} · staleDrops ${this.droppedSnapshots}\nERROR server ${p.serverError.toFixed(3)}m · afterReplay ${p.replayError.toFixed(3)}m\nCORRECTIONS ${p.corrections} · last ${p.lastCorrection.toFixed(3)}m / sum ${p.totalCorrection.toFixed(3)}m / max ${p.maxCorrection.toFixed(3)}m · resets ${p.resets}\nPRED ${point(p.position)} / AUTH ${point(server?.position)}\nSERVER LOOK ${server?.input.yaw.toFixed(3)??'-'},${server?.input.pitch.toFixed(3)??'-'}\nVISUAL ${Math.hypot(p.offset.x,p.offset.y,p.offset.z).toFixed(3)}m\nWRITE ${p.writer}\nSERVER ${a?.lastPositionWriter??'-'} · overlapRecoveries ${a?.recoveryCount??0}`;
  }
  resetDiagnostics(){this.rtts.clear();this.jitter.clear();this.snapshotGaps.clear();this.underflowCount=0;this.underflowFrames=0;this.pingTimeouts=0;this.trace.length=0;this.prediction.corrections=0;this.prediction.totalCorrection=0;this.prediction.maxCorrection=0;this.prediction.lastCorrection=0;this.prediction.resets=0;this.droppedSnapshots=0;}
- close(){if(this.closed)return;this.closed=true;this.connected=false;this.removePong?.();this.pings.clear();this.room.onStateChange.remove(this.receive);this.room.onDrop.remove(this.drop);this.room.onLeave.remove(this.drop);this.room.onError.remove(this.error);this.prediction.pending.length=0;if(this.room.connection?.isOpen)void this.room.leave().catch(()=>{});}
+ close(){if(this.closed)return;this.closed=true;this.connected=false;this.chat.close();this.removePong?.();this.pings.clear();this.room.onStateChange.remove(this.receive);this.room.onDrop.remove(this.drop);this.room.onLeave.remove(this.drop);this.room.onError.remove(this.error);this.prediction.pending.length=0;if(this.room.connection?.isOpen)void this.room.leave().catch(()=>{});}
 }
 export async function connectOnline(roomId?:string,nickname?:string,mode:RoomMode='practice'){const address=process.env.NEXT_PUBLIC_GAME_SERVER_URL;if(!address)throw Error('NEXT_PUBLIC_GAME_SERVER_URL을 설정하고 웹 서버를 다시 시작하세요.');if(!/^wss?:\/\//.test(address))throw Error('게임 서버 주소는 ws:// 또는 wss://로 설정하세요.');
  const client=new Client(address);const room=roomId?await client.joinById(roomId.trim(),{nickname}):await client.create('basketball',{nickname,mode});return new OnlineSession(room);

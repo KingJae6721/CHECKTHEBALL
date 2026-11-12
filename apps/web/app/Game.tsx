@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
+import RoomChat from './RoomChat';
 import MatchPanel from './MatchPanel';import GameHud from './GameHud';import RoomInvite from './RoomInvite';import {Settings,Help,Credits} from './MenuPanels';
 import type {OnlineSession} from '../game/onlineClient';import type {Snapshot,createGame} from '../game/createGame';
 import {BackgroundMusic} from '../game/backgroundMusic';
@@ -12,6 +13,7 @@ const initial:Snapshot={defense:createDefense(),practice:createPractice(),passCh
 function storage():Store|undefined{try{return window.localStorage;}catch{return undefined;}}
 export default function Game(){
  const canvas=useRef<HTMLCanvasElement>(null),runtime=useRef<ReturnType<typeof createGame>|null>(null),factory=useRef<typeof createGame|null>(null),sessionRef=useRef<OnlineSession|undefined>(undefined),gate=useRef(new ConnectionAttempt()),generation=useRef(0);
+ const [chatOpen,setChatOpen]=useState(false);
  const [screen,setScreen]=useState<MenuScreen>('HOME'),[panel,setPanel]=useState<'MAIN'|'SETTINGS'|'HELP'|'CREDITS'>('MAIN');
  const [state,setState]=useState(initial),[session,setSession]=useState<OnlineSession>(),[factoryReady,setFactoryReady]=useState(false),[sceneReady,setSceneReady]=useState(false),[hasPlayed,setHasPlayed]=useState(false);
  const [nickname,setNickname]=useState(''),[nicknameError,setNicknameError]=useState(''),[profileReady,setProfileReady]=useState(false),[roomId,setRoomId]=useState(''),[roomMode,setRoomMode]=useState<RoomMode>('duel'),[scenario,setScenario]=useState<PracticeMode>('PASS'),[error,setError]=useState('');
@@ -35,13 +37,13 @@ export default function Game(){
  useEffect(()=>{const p=loadPreferences(storage(),'게스트'+Math.floor(1000+Math.random()*9000));setNickname(p.nickname);setAudio(p.audio);setCamera(p.camera);prefs.current={audio:p.audio,camera:p.camera};music.current?.setSettings(p.audio);setProfileReady(true);},[]);
  useEffect(()=>{let cancelled=false;import('../game/createGame').then(m=>{if(!cancelled){factory.current=m.createGame;setFactoryReady(true);}}).catch(()=>{if(!cancelled)setError('게임 파일을 불러오지 못했습니다. 새로고침해주세요.');});return()=>{cancelled=true;};},[]);
  useEffect(()=>()=>{gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;sessionRef.current?.close();sessionRef.current=undefined;},[]);
- useEffect(()=>{if(playing&&state.locked)return;const id=requestAnimationFrame(()=>document.querySelector<HTMLElement>('[data-menu-title]')?.focus());return()=>cancelAnimationFrame(id);},[screen,panel,state.locked]);
+ useEffect(()=>{if(chatOpen||playing&&state.locked)return;const id=requestAnimationFrame(()=>document.querySelector<HTMLElement>('[data-menu-title]')?.focus());return()=>cancelAnimationFrame(id);},[screen,panel,state.locked,chatOpen]);
  useEffect(()=>{const escape=(e:KeyboardEvent)=>{if(e.code==='Escape'&&!document.pointerLockElement&&panel!=='MAIN'){setPanel('MAIN');e.preventDefault();}};window.addEventListener('keydown',escape);return()=>window.removeEventListener('keydown',escape);},[panel]);
  function saveName(){const v=validateNickname(nickname);setNicknameError(v.error??'');if(v.error)return false;setNickname(v.name);savePreference(storage(),NICKNAME_KEY,v.name);return true;}
  function changeAudio(next:AudioSettings){prefs.current.audio=next;setAudio(next);savePreference(storage(),AUDIO_STORAGE_KEY,JSON.stringify(next));runtime.current?.setAudio(next);music.current?.setSettings(next);void music.current?.activate();}
  function changeCamera(next:boolean){prefs.current.camera=next;setCamera(next);savePreference(storage(),CAMERA_KEY,String(next));runtime.current?.setCameraMotion(next);}
  function openPanel(next:typeof panel){if(connecting){gate.current.cancel();setScreen('FRIENDS');}runtime.current?.pause();setPanel(next);}
- function home(){gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;sessionRef.current?.close();sessionRef.current=undefined;setSession(undefined);setSceneReady(false);setState(initial);setHasPlayed(false);setError('');setPanel('MAIN');setScreen('HOME');}
+ function home(){setChatOpen(false);gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;sessionRef.current?.close();sessionRef.current=undefined;setSession(undefined);setSceneReady(false);setState(initial);setHasPlayed(false);setError('');setPanel('MAIN');setScreen('HOME');}
  function navigate(next:'FRIENDS'|'PRACTICE_SELECT'){if(!saveName())return;void music.current?.activate();setError('');setPanel('MAIN');setScreen(next);}
  function enter(){void music.current?.activate();setError('');setPanel('MAIN');void runtime.current?.start();}
  function launch(online?:OnlineSession,autoStart=false){
@@ -65,9 +67,9 @@ export default function Game(){
  function back(){gate.current.cancel();setError('');setScreen(connecting?'FRIENDS':'HOME');setPanel('MAIN');}
  function chooseScenario(next:PracticeMode){setScenario(next);if(playing&&!session)runtime.current?.scenario(next);}
  const ping=state.online?.pingMs,pingQuality=ping==null?'unknown':ping<=100?'good':ping<=200?'fair':'poor';
- const showCard=!playing||!state.locked&&(!state.online?.match||panel!=='MAIN');
+ const showCard=!chatOpen&&(!playing||!state.locked&&(!state.online?.match||panel!=='MAIN'));
  const chooser=<fieldset className="scenario-choices"><legend>연습 선택</legend>{Object.entries(scenarios).map(([id,item])=><label key={id}><input type="radio" name="scenario" value={id} checked={scenario===id} onChange={()=>chooseScenario(id as PracticeMode)}/><span><strong>{item.name}</strong><small>{item.description}</small></span></label>)}</fieldset>;
- return <main className={`game ${!playing||!state.locked?'menu-shell':''}`} onKeyDownCapture={e=>{if(e.code!=='Escape'&&(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement))e.stopPropagation();}}>
+ return <main className={`game ${!playing||!state.locked?'menu-shell':''}`} onKeyDownCapture={e=>{if(e.code!=='Escape'&&(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement)&&!(e.target as HTMLElement).closest('.room-chat'))e.stopPropagation();}}>
   <canvas ref={canvas} hidden={!playing} aria-label="농구 코트"/>
   {!playing&&<div className="home-backdrop" aria-hidden="true"><svg viewBox="0 0 760 800"><path d="M35 765V40H725V765ZM35 445H725M270 40V280H490V40M270 280A110 110 0 0 0 490 280M70 40V115A310 310 0 0 0 690 115V40"/><circle cx="380" cy="95" r="18"/><path className="home-rim" d="M340 65H420M362 95H398"/></svg></div>}
   <div className="vignette"/>
@@ -75,7 +77,7 @@ export default function Game(){
    {playing&&state.online&&<span className={`network-ping ${pingQuality}`} title={state.online.pingStatus} aria-label={ping==null?state.online.pingStatus:`핑 ${ping}ms`}>{ping??'--'}<small>ms</small></span>}
    <button className="menu-utility" onClick={()=>openPanel('SETTINGS')}>설정</button><button className="menu-utility" onClick={()=>openPanel('HELP')}>조작 안내</button>
   </div></header>
-  {playing&&state.locked&&panel==='MAIN'&&<GameHud state={state} onReset={()=>runtime.current?.reset()}/>}
+  {playing&&(state.locked||chatOpen)&&panel==='MAIN'&&<GameHud state={state} onReset={()=>runtime.current?.reset()}/>}
   {showCard&&<div className="menu-layer"><section className="menu-card" aria-label={panel==='SETTINGS'?'설정':panel==='HELP'?'조작 안내':panel==='CREDITS'?'크레딧':'시작 메뉴'}>
    {panel==='SETTINGS'?<Settings onMusic={()=>void music.current?.activate()} audio={audio} camera={camera} onAudio={changeAudio} onCamera={changeCamera} onBack={()=>setPanel('MAIN')}/>:
     panel==='HELP'?<Help online={!!session} onBack={()=>setPanel('MAIN')}/>:
@@ -96,7 +98,8 @@ export default function Game(){
     </>}
    {error&&<p className="menu-error" role="alert">{error}</p>}<p className="desktop-note">데스크톱 키보드와 마우스로 플레이해주세요. 모바일 조작은 지원하지 않습니다.</p>
   </section></div>}
-  {playing&&state.online?.match&&panel==='MAIN'&&<MatchPanel error={error} roomCode={state.online.roomId} match={state.online.match} players={state.online.players} selfId={state.online.selfId} remainingMs={state.online.remainingMs??0} locked={state.locked} connected={state.online.connected} onIntent={intent=>session?.matchIntent(intent)} onEnter={enter} onLeave={home} onSettings={()=>openPanel('SETTINGS')} onHelp={()=>openPanel('HELP')}/>}
+  {playing&&state.online?.match&&!chatOpen&&panel==='MAIN'&&<MatchPanel error={error} roomCode={state.online.roomId} match={state.online.match} players={state.online.players} selfId={state.online.selfId} remainingMs={state.online.remainingMs??0} locked={state.locked} connected={state.online.connected} onIntent={intent=>session?.matchIntent(intent)} onEnter={enter} onLeave={home} onSettings={()=>openPanel('SETTINGS')} onHelp={()=>openPanel('HELP')}/>}
+  {playing&&session&&panel==='MAIN'&&<RoomChat key={session.room.sessionId} session={session} onBegin={()=>runtime.current?.pause('CHAT')} onOpenChange={setChatOpen} onClose={()=>{if(session.canPlay)enter();}}/>}
   {playing&&state.audioFailed&&!audio.muted&&audio.volume>0&&<button className="audio-recovery" onClick={()=>runtime.current?.unlockAudio()}>소리가 켜지지 않았습니다 · 눌러서 다시 켜기</button>}
  </main>;
 }

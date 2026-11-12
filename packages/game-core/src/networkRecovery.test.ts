@@ -7,7 +7,7 @@ import {NETWORK} from '../../protocol/src/index.ts';
 function setup(){
  const world=new OnlineWorld();world.join('a');const sent:any[]=[];
  const event=Object.assign(()=>{},{remove:()=>{}});
- const room={sessionId:'a',roomId:'test',reconnection:{enabled:true},onDrop:event,onLeave:event,onError:event,onStateChange:event,send:(_name:string,value:any)=>{sent.push(value);world.receive('a',value);},connection:{isOpen:false}};
+ const room={sessionId:'a',roomId:'test',reconnection:{enabled:true},onDrop:event,onLeave:event,onError:event,onStateChange:event,send:(_name:string,value:any)=>{if(_name==='input'){sent.push(value);world.receive('a',value);}},onMessage:()=>()=>{},connection:{isOpen:false}};
  const session=new OnlineSession(room as any);session.receive({frame:JSON.stringify(world.snapshot())});return {world,session,sent};
 }
 test('pump gap and catch-up limit recover movement without sending gameplay cancel',()=>{

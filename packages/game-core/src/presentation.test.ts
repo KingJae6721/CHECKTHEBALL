@@ -26,7 +26,7 @@ test('144Hz presentation moves between 60Hz steps while logical command results 
  }assert.ok(logicalStops>100);assert.equal(visualStops,0);assert.equal(p.pending.length,120);
 });
 test('snapshot underflow counts episodes and revision changes never tween ball discontinuities',()=>{
- const event=Object.assign(()=>{},{remove(){}}),room={sessionId:'a',reconnection:{enabled:true},onDrop:event,onLeave:event,onError:event,onStateChange:event,connection:{isOpen:false}};
+ const event=Object.assign(()=>{},{remove(){}}),room={sessionId:'a',reconnection:{enabled:true},onDrop:event,onLeave:event,onError:event,onStateChange:event,send:()=>{},onMessage:()=>()=>{},connection:{isOpen:false}};
  const session=new OnlineSession(room as any),w=new OnlineWorld();w.join('a');w.join('b');
  const a=w.snapshot();a.tick=1;a.time=100;a.ball={x:0,y:1,z:0};const b=structuredClone(a);b.tick=2;b.time=150;b.ball.x=2;
  session.frames=[a,b];(session as any).clockOffset=0;

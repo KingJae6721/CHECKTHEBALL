@@ -1,5 +1,6 @@
 import type {MatchState} from '../../../packages/game-core/src/match';
 import {toggleScreen} from '../../../packages/game-core/src/screen';
+import {createNameplate} from './createNameplate';
 import {createNet} from './createNet';
 import {AudioManager} from './audioManager';
 import {AudioTimeline,MotionSounds} from './audioTimeline';
@@ -90,8 +91,10 @@ export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,
   for(let i=0;i<=BODY.iterations;i++){const ray=MeshBuilder.CreateLines('body-contact-'+i,{points:[Vector3.Zero(),new Vector3(0,0,.001)],updatable:true},scene);ray.color=i===BODY.iterations?new Color3(1,.3,.2):new Color3(.3,1,.6);ray.isPickable=false;ray.setEnabled(false);bodyNormals.push(ray);debugMeshes.push(ray);}
  }
  const fixedCharacters=Array.from({length:online?0:2},(_,i)=>createCharacter(scene,{name:'fixed-screen-'+i,firstPerson:false,appearance}));for(const rig of fixedCharacters)rig.root.setEnabled(false);
- const dummy=online?null:createDummy(scene,appearance);
+ const nameOccluders=scene.meshes.filter((mesh):mesh is Mesh=>mesh instanceof Mesh&&['backboard','pole','support','building','fence-post','fence-wire','light-post'].includes(mesh.name));
+ const dummy=online?null:createDummy(scene,appearance,nameOccluders);
  const opponent=online?createCharacter(scene,{name:'remote-player',firstPerson:false,appearance}):null;opponent?.root.setEnabled(false);
+ const opponentLabel=opponent?createNameplate(scene,opponent.root,'opponent-name',nameOccluders):null;
  const playerCharacter=createCharacter(scene,{name:'player',firstPerson:true,appearance});
  let debugVisible=false,onlineFrame:WorldSnapshot|undefined;
  const remoteView=createState();
@@ -160,7 +163,8 @@ export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,
   if(!online)audible.push({id:'dummy',position:DUMMY.position,vy:0,motion:state.dummyMotion,locomotion:dummyLocomotion,owns:state.owner==='dummy',grounded:true,near:false,block:false});
   motionSounds.retain(audible.map(a=>a.id));for(const actor of audible)for(const cue of motionSounds.sample(actor,now,!online))audio.play(cue,camera.position,input.yaw,now);
  }else{audioTimeline.discard();motionSounds.clear();}
+ camera.getViewMatrix();camera.getProjectionMatrix();const labelActor=onlineFrame?.players.find(a=>a.id!==online?.room.sessionId);opponentLabel?.update(labelActor?.nickname||'Opponent',!!labelActor&&!!online?.connected,now);dummy?.updateLabel(now);
  scene.render();frameDiagnostics.end(performance.now(),camera.rotation.y,camera.rotation.x,input.yaw,input.pitch);online?.recordFrame(frameDiagnostics.lastFrameMs,performance.now()-now);if(now-lastUI>50){update();lastUI=now;}});
  update();
- return {reset,scenario,setAudio(settings:AudioSettings){audio.setSettings(settings);},unlockAudio(){void unlockAudio();},pause(){clear('MENU');if(document.pointerLockElement===canvas)document.exitPointerLock();update();},setCameraMotion(enabled:boolean){cameraMotionEnabled=enabled;resetCameraMotion(cameraMotion);camera.position.set(state.player.x,state.player.y+CFG.eye,state.player.z);},async start(){clearAudio();audioTimeline=new AudioTimeline();audioTimeline.ingest(online?.latest?.events??state.events.recent,performance.now());void unlockAudio();try{await canvas.requestPointerLock();}catch{if(!disposed)onError('마우스를 잠글 수 없습니다. 새 탭에서 게임을 열고 다시 눌러주세요.');}},dispose(){if(disposed)return;disposed=true;clearAudio();audio.dispose();liveRuntimes.set(canvas,Math.max(0,(liveRuntimes.get(canvas)??1)-1));if(inputTimer!==undefined)window.clearInterval(inputTimer);if(online)delete (window as unknown as {checkTheBallNetwork?:()=>unknown}).checkTheBallNetwork;if(document.pointerLockElement===canvas)document.exitPointerLock();for(const[t,k,f]of listeners)t.removeEventListener(k,f);engine.stopRenderLoop();scene.dispose();engine.dispose();}};
+ return {reset,scenario,setAudio(settings:AudioSettings){audio.setSettings(settings);},unlockAudio(){void unlockAudio();},pause(reason='MENU'){clear(reason);if(document.pointerLockElement===canvas)document.exitPointerLock();update();},setCameraMotion(enabled:boolean){cameraMotionEnabled=enabled;resetCameraMotion(cameraMotion);camera.position.set(state.player.x,state.player.y+CFG.eye,state.player.z);},async start(){clearAudio();audioTimeline=new AudioTimeline();audioTimeline.ingest(online?.latest?.events??state.events.recent,performance.now());void unlockAudio();try{await canvas.requestPointerLock();}catch{if(!disposed)onError('마우스를 잠글 수 없습니다. 새 탭에서 게임을 열고 다시 눌러주세요.');}},dispose(){if(disposed)return;disposed=true;clearAudio();audio.dispose();liveRuntimes.set(canvas,Math.max(0,(liveRuntimes.get(canvas)??1)-1));if(inputTimer!==undefined)window.clearInterval(inputTimer);if(online)delete (window as unknown as {checkTheBallNetwork?:()=>unknown}).checkTheBallNetwork;if(document.pointerLockElement===canvas)document.exitPointerLock();for(const[t,k,f]of listeners)t.removeEventListener(k,f);engine.stopRenderLoop();scene.dispose();engine.dispose();}};
 }
