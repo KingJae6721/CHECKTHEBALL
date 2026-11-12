@@ -67,3 +67,6 @@ for seed,(name,(seconds,freq,decay,noise)) in enumerate(specs.items()):
     for i in range(int(rate*.006)):samples[-1-i]*=i/(rate*.006)
     save(name+'.wav',samples)
 print('Prepared bounce x5, rim x5, swish x7, catch x3 and recorded jump; other assets preserved.')
+
+# BGM is already MP3: preserve encoding and copy only the browser-served asset.
+shutil.copyfile(root / 'sounds/songs/Funkorama.mp3', out / 'Funkorama.mp3')

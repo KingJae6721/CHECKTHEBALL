@@ -8,7 +8,7 @@ export class AudioManager{
  private last=new Map<string,number>();private disposed=false;private hidden=false;
  constructor(){let raw=null;try{raw=localStorage.getItem(AUDIO_STORAGE_KEY);}catch{}this.settings=parseAudioSettings(raw);}
  get ready(){return this.context?.state==='running';}
- setSettings(settings:AudioSettings){this.settings={volume:Number.isFinite(settings.volume)?Math.max(0,Math.min(1,settings.volume)):AUDIO.defaultVolume,muted:settings.muted};try{localStorage.setItem(AUDIO_STORAGE_KEY,JSON.stringify(this.settings));}catch{}this.applyVolume();if(this.settings.muted||this.settings.volume===0)this.stop();}
+ setSettings(settings:AudioSettings){this.settings=parseAudioSettings(JSON.stringify(settings));try{localStorage.setItem(AUDIO_STORAGE_KEY,JSON.stringify(this.settings));}catch{}this.applyVolume();if(this.settings.muted||this.settings.volume===0)this.stop();}
  private applyVolume(){if(this.context&&this.master)this.master.gain.setTargetAtTime(this.hidden||this.settings.muted?0:this.settings.volume*AUDIO.headroom,this.context.currentTime,.015);}
  async unlock(){
   if(this.disposed)return;

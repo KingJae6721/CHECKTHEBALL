@@ -71,7 +71,7 @@ test('walking and running stay silent; suspended tab never catches up old cycles
  a.position.y=0;a.locomotion.phase=.1;a.locomotion.distance=20;assert.equal(m.sample(a,2000).length,0);m.clear();assert.equal(m.sample(a,2020).length,0);
 });
 test('audio setting parser handles corrupted storage and clamps volume',()=>{
- assert.equal(parseAudioSettings('broken').volume,AUDIO.defaultVolume);assert.deepEqual(parseAudioSettings('{"volume":9,"muted":true}'),{volume:1,muted:true});assert.equal(parseAudioSettings(null).muted,false);
+ assert.equal(parseAudioSettings('broken').volume,AUDIO.defaultVolume);assert.deepEqual(parseAudioSettings('{"volume":9,"muted":true}'),{volume:1,muted:true,bgmEnabled:true,bgmVolume:.2});assert.equal(parseAudioSettings(null).muted,false);
 });
 test('future sound reservations expire on wall time and old event IDs never return after dedup expiry',()=>{
  const q=new AudioTimeline();q.ingest([],0);q.ingest([event(1,10000)],10);assert.equal(q.queued,1);

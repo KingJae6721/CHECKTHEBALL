@@ -15,8 +15,11 @@ export const AUDIO = {
     }
 } as const;
 export type SoundKind = keyof typeof AUDIO.effects;
-export type AudioSettings = { volume: number; muted: boolean };
+export const BGM = {file:'/assets/audio/Funkorama.mp3',defaultVolume:.2,playingMultiplier:.5,fadeMs:500} as const;
+export type AudioSettings = { volume: number; muted: boolean; bgmEnabled?:boolean; bgmVolume?:number };
 export const AUDIO_STORAGE_KEY = 'check-the-ball.audio.v1';
 export function parseAudioSettings(raw: string | null): AudioSettings {
-    try { const v = JSON.parse(raw ?? 'null'); return { volume: typeof v?.volume === 'number' && Number.isFinite(v.volume) ? Math.max(0, Math.min(1, v.volume)) : AUDIO.defaultVolume, muted: v?.muted === true }; } catch { return { volume: AUDIO.defaultVolume, muted: false }; }
+    let v;try{v=JSON.parse(raw??'null');}catch{}
+    const volume=(n:unknown,fallback:number)=>typeof n==='number'&&Number.isFinite(n)?Math.max(0,Math.min(1,n)):fallback;
+    return {volume:volume(v?.volume,AUDIO.defaultVolume),muted:v?.muted===true,bgmEnabled:v?.bgmEnabled!==false,bgmVolume:volume(v?.bgmVolume,BGM.defaultVolume)};
 }

@@ -9,7 +9,7 @@ test('guest names trim, reject empty/control/overlong names and keep text as tex
 });
 test('existing profile/settings restore; blocked storage keeps memory defaults usable',()=>{
  const map=new Map([[NICKNAME_KEY,' Guest '],[CAMERA_KEY,'false'],[AUDIO_STORAGE_KEY,'{"volume":0.25,"muted":true}']]),store={getItem:(k:string)=>map.get(k)??null,setItem:(k:string,v:string)=>{map.set(k,v);}};
- assert.deepEqual(loadPreferences(store,'Suggestion'),{nickname:'Guest',camera:false,audio:{volume:.25,muted:true}});
+ assert.deepEqual(loadPreferences(store,'Suggestion'),{nickname:'Guest',camera:false,audio:{volume:.25,muted:true,bgmEnabled:true,bgmVolume:.2}});
  const blocked={getItem(){throw Error('blocked');},setItem(){throw Error('blocked');}};
  assert.equal(loadPreferences(blocked,'Suggestion').nickname,'Suggestion');assert.doesNotThrow(()=>savePreference(blocked,NICKNAME_KEY,'Memory only'));
  map.set(NICKNAME_KEY,'');assert.equal(loadPreferences(store,'Suggestion').nickname,'Suggestion');

@@ -21,7 +21,7 @@ test('one context, decoded assets reused, bounded voices, mute/visibility/dispos
   const play=(kind:keyof typeof AUDIO.effects,now:number)=>a.play({key:'event:test',kind,position:{x:0,y:0,z:0},strength:7},{x:0,y:0,z:0},0,now);
   play('rim',1000);play('net',1000);assert.ok(sourceList[1].startTime!>sourceList[0].startTime!);
   for(let round=0;round<3;round++)for(const kind of Object.keys(AUDIO.effects))play(kind as keyof typeof AUDIO.effects,2000+round*1000);
-  assert.equal(sources,AUDIO.voices);a.setSettings({volume:.3,muted:true});assert.equal(stops,AUDIO.voices);play('floor',9000);assert.equal(sources,AUDIO.voices);assert.deepEqual(JSON.parse(stored),{volume:.3,muted:true});
+  assert.equal(sources,AUDIO.voices);a.setSettings({volume:.3,muted:true});assert.equal(stops,AUDIO.voices);play('floor',9000);assert.equal(sources,AUDIO.voices);assert.deepEqual(JSON.parse(stored),{volume:.3,muted:true,bgmEnabled:true,bgmVolume:.2});
   a.setSettings({volume:.3,muted:false});play('floor',10000);assert.equal(sources,AUDIO.voices+1);
   a.setHidden(true);play('floor',11000);assert.equal(sources,AUDIO.voices+1);a.dispose();a.dispose();assert.equal(closed,1);
  }finally{

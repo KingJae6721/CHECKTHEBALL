@@ -2,6 +2,7 @@
 import {useEffect,useRef,useState} from 'react';
 import MatchPanel from './MatchPanel';import GameHud from './GameHud';import RoomInvite from './RoomInvite';import {Settings,Help,Credits} from './MenuPanels';
 import type {OnlineSession} from '../game/onlineClient';import type {Snapshot,createGame} from '../game/createGame';
+import {BackgroundMusic} from '../game/backgroundMusic';
 import {AUDIO_STORAGE_KEY,parseAudioSettings,type AudioSettings} from '../game/audioConfig';
 import {CAMERA_KEY,NICKNAME_KEY,loadPreferences,savePreference,roomIdError,connectionError,ConnectionAttempt,type Store,type MenuScreen} from '../game/menuState';
 import {validateNickname,NICKNAME_MAX} from '../../../packages/protocol/src/nickname';
@@ -15,20 +16,36 @@ export default function Game(){
  const [state,setState]=useState(initial),[session,setSession]=useState<OnlineSession>(),[factoryReady,setFactoryReady]=useState(false),[sceneReady,setSceneReady]=useState(false),[hasPlayed,setHasPlayed]=useState(false);
  const [nickname,setNickname]=useState(''),[nicknameError,setNicknameError]=useState(''),[profileReady,setProfileReady]=useState(false),[roomId,setRoomId]=useState(''),[roomMode,setRoomMode]=useState<RoomMode>('duel'),[scenario,setScenario]=useState<PracticeMode>('PASS'),[error,setError]=useState('');
  const [audio,setAudio]=useState<AudioSettings>(()=>parseAudioSettings(null)),[camera,setCamera]=useState(HEAD_BOB.enabled);const prefs=useRef({audio:parseAudioSettings(null),camera:HEAD_BOB.enabled});
+ const music=useRef<BackgroundMusic|null>(null);
+ useEffect(()=>{const bgm=new BackgroundMusic();music.current=bgm;bgm.setSettings(prefs.current.audio);bgm.setHidden(document.hidden);const visibility=()=>bgm.setHidden(document.hidden);document.addEventListener('visibilitychange',visibility);return()=>{document.removeEventListener('visibilitychange',visibility);bgm.dispose();if(music.current===bgm)music.current=null;};},[]);
+ useEffect(()=>{music.current?.setPlayingMatch(screen==='PLAYING'&&state.online?.match?.stage==='PLAYING');},[screen,state.online?.match?.stage]);
+ useEffect(()=>{
+  if(!profileReady)return;
+  const remove=()=>{document.removeEventListener('click',activate);document.removeEventListener('keydown',activate);};
+  const activate=(event:MouseEvent|KeyboardEvent)=>{
+   if(!event.isTrusted)return;
+   if(event instanceof KeyboardEvent&&(event.repeat||event.ctrlKey||event.metaKey||event.altKey||['Escape','Shift','Control','Alt','Meta'].includes(event.key)))return;
+   remove();void music.current?.activate();
+  };
+  // Bubble after UI handlers so a first click on mute/disable still respects that choice.
+  document.addEventListener('click',activate);document.addEventListener('keydown',activate);
+  return remove;
+ },[profileReady]);
  const playing=screen==='PLAYING',connecting=screen==='CONNECTING';
- useEffect(()=>{const p=loadPreferences(storage(),'게스트'+Math.floor(1000+Math.random()*9000));setNickname(p.nickname);setAudio(p.audio);setCamera(p.camera);prefs.current={audio:p.audio,camera:p.camera};setProfileReady(true);},[]);
+ useEffect(()=>{const p=loadPreferences(storage(),'게스트'+Math.floor(1000+Math.random()*9000));setNickname(p.nickname);setAudio(p.audio);setCamera(p.camera);prefs.current={audio:p.audio,camera:p.camera};music.current?.setSettings(p.audio);setProfileReady(true);},[]);
  useEffect(()=>{let cancelled=false;import('../game/createGame').then(m=>{if(!cancelled){factory.current=m.createGame;setFactoryReady(true);}}).catch(()=>{if(!cancelled)setError('게임 파일을 불러오지 못했습니다. 새로고침해주세요.');});return()=>{cancelled=true;};},[]);
  useEffect(()=>()=>{gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;sessionRef.current?.close();sessionRef.current=undefined;},[]);
  useEffect(()=>{if(playing&&state.locked)return;const id=requestAnimationFrame(()=>document.querySelector<HTMLElement>('[data-menu-title]')?.focus());return()=>cancelAnimationFrame(id);},[screen,panel,state.locked]);
  useEffect(()=>{const escape=(e:KeyboardEvent)=>{if(e.code==='Escape'&&!document.pointerLockElement&&panel!=='MAIN'){setPanel('MAIN');e.preventDefault();}};window.addEventListener('keydown',escape);return()=>window.removeEventListener('keydown',escape);},[panel]);
  function saveName(){const v=validateNickname(nickname);setNicknameError(v.error??'');if(v.error)return false;setNickname(v.name);savePreference(storage(),NICKNAME_KEY,v.name);return true;}
- function changeAudio(next:AudioSettings){prefs.current.audio=next;setAudio(next);savePreference(storage(),AUDIO_STORAGE_KEY,JSON.stringify(next));runtime.current?.setAudio(next);}
+ function changeAudio(next:AudioSettings){prefs.current.audio=next;setAudio(next);savePreference(storage(),AUDIO_STORAGE_KEY,JSON.stringify(next));runtime.current?.setAudio(next);music.current?.setSettings(next);void music.current?.activate();}
  function changeCamera(next:boolean){prefs.current.camera=next;setCamera(next);savePreference(storage(),CAMERA_KEY,String(next));runtime.current?.setCameraMotion(next);}
  function openPanel(next:typeof panel){if(connecting){gate.current.cancel();setScreen('FRIENDS');}runtime.current?.pause();setPanel(next);}
  function home(){gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;sessionRef.current?.close();sessionRef.current=undefined;setSession(undefined);setSceneReady(false);setState(initial);setHasPlayed(false);setError('');setPanel('MAIN');setScreen('HOME');}
- function navigate(next:'FRIENDS'|'PRACTICE_SELECT'){if(!saveName())return;setError('');setPanel('MAIN');setScreen(next);}
- function enter(){setError('');setPanel('MAIN');void runtime.current?.start();}
+ function navigate(next:'FRIENDS'|'PRACTICE_SELECT'){if(!saveName())return;void music.current?.activate();setError('');setPanel('MAIN');setScreen(next);}
+ function enter(){void music.current?.activate();setError('');setPanel('MAIN');void runtime.current?.start();}
  function launch(online?:OnlineSession,autoStart=false){
+  if(autoStart)void music.current?.activate();
   if(runtime.current)return false;
   if(!factory.current||!canvas.current){setError('코트를 준비 중입니다. 잠시 후 다시 눌러주세요.');return false;}
   const id=++generation.current;setState(initial);setHasPlayed(false);setError('');canvas.current.hidden=false;
@@ -36,7 +53,7 @@ export default function Game(){
   catch{generation.current++;runtime.current?.dispose();runtime.current=null;canvas.current.hidden=true;setError('코트를 열지 못했습니다. 하드웨어 가속과 WebGL 지원을 확인해주세요.');return false;}
  }
  async function join(create:boolean){
-  if(!saveName())return;if(!create){const invalid=roomIdError(roomId);if(invalid){setError(invalid);return;}}
+  if(!saveName())return;void music.current?.activate();if(!create){const invalid=roomIdError(roomId);if(invalid){setError(invalid);return;}}
   const token=gate.current.begin();if(token===null)return;setError('');setScreen('CONNECTING');
   try{const {connectOnline}=await import('../game/onlineClient');if(!gate.current.current(token))return;const connected=await connectOnline(create?undefined:roomId.trim(),validateNickname(nickname).name,roomMode);
    if(!gate.current.accept(token,connected))return;
@@ -60,7 +77,7 @@ export default function Game(){
   </div></header>
   {playing&&state.locked&&panel==='MAIN'&&<GameHud state={state} onReset={()=>runtime.current?.reset()}/>}
   {showCard&&<div className="menu-layer"><section className="menu-card" aria-label={panel==='SETTINGS'?'설정':panel==='HELP'?'조작 안내':panel==='CREDITS'?'크레딧':'시작 메뉴'}>
-   {panel==='SETTINGS'?<Settings audio={audio} camera={camera} onAudio={changeAudio} onCamera={changeCamera} onBack={()=>setPanel('MAIN')}/>:
+   {panel==='SETTINGS'?<Settings onMusic={()=>void music.current?.activate()} audio={audio} camera={camera} onAudio={changeAudio} onCamera={changeCamera} onBack={()=>setPanel('MAIN')}/>:
     panel==='HELP'?<Help online={!!session} onBack={()=>setPanel('MAIN')}/>:
     panel==='CREDITS'?<Credits onBack={()=>setPanel('MAIN')}/>:
     screen==='HOME'?<><span className="eyebrow">PICK UP. PLAY.</span><h1 tabIndex={-1} data-menu-title>내 코트, 내 리듬.</h1><p>친구와 한 판, 혼자서 한 번 더.<br/>가볍게 시작하는 1인칭 농구.</p>

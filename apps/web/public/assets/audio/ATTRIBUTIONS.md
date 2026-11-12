@@ -87,3 +87,17 @@ No voice/grunt samples are included. Backboard and net effects are actual record
   automatic safety recovery are silent. Online catches are authoritative, never replay-predicted.
 - Ordinary jumps and block jumps share the recorded jump buffer without double playback.
   The former synthetic `block-jump.wav` is no longer selected.
+
+## Background music
+
+“Funkorama” — Kevin MacLeod (incompetech.com)
+
+Source: https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100474
+
+Licensed under Creative Commons Attribution 4.0 International:
+https://creativecommons.org/licenses/by/4.0/
+
+User-supplied original: `sounds/songs/Funkorama.mp3`. Browser asset:
+`apps/web/public/assets/audio/Funkorama.mp3`. Copied byte-for-byte; no re-encoding,
+trimming, or file fade edits. Playback volume/fades are runtime effects only.
+This recording retains its CC BY 4.0 license independently of the repository's code license.
