@@ -13,6 +13,8 @@ export const COURT = {
   board: { center: { x: 0, y: 3.55, z: 6.1 }, width: 1.8, height: 1.05, depth: .07 },
   rim: { x: 0, y: 3.05, z: 5.7 }, rimRadius: .24, rimTubeRadius: .0175, rimSegments: 48,
 };
+// Initial timing tuning, not measured shooting percentages. Distances are XZ metres.
+export const SHOT_TIMING={idealCharge:.7,maxCharge:1.2,nearDistance:1.5,farDistance:8,nearHalfWindow:.09,farHalfWindow:.025,referenceHalfWindow:.05} as const;
 // Initial gameplay tuning, not measured material properties.
 export const PHYSICS = {
   floor: { restitution: .68, friction: 1.8 },

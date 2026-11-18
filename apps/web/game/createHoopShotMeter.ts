@@ -1,6 +1,7 @@
 import {Matrix,Vector3,type Camera,type Scene} from '@babylonjs/core';
 import {CFG,type State} from '../../../packages/game-core/src/simulation';
-import {SHOT_METER,SHOT_ZONE,shotMeterLayout} from './shotMeterLayout';
+import {SHOT_METER,SHOT_ZONE,shotMeterLayout,shotMeterZone} from './shotMeterLayout';
+import {shotDistance} from '../../../packages/game-core/src/shotTiming';
 
 // One DOM overlay, projected from the rendered camera. Never feeds gameplay state.
 export function createHoopShotMeter(canvas:HTMLCanvasElement,scene:Scene,camera:Camera){
@@ -17,6 +18,7 @@ export function createHoopShotMeter(canvas:HTMLCanvasElement,scene:Scene,camera:
  function update(state:State,enabled:boolean){
   if(disposed)return;
   if(!enabled||state.owner!=='player'||state.phase==='PASS_CHARGING'){root.hidden=true;return;}
+  const band=shotMeterZone(shotDistance(state.player));zone.style.bottom=`${band.bottom*100}%`;zone.style.height=`${band.height*100}%`;
   const engine=scene.getEngine(),renderWidth=engine.getRenderWidth(),renderHeight=engine.getRenderHeight(),width=canvas.clientWidth,height=canvas.clientHeight;
   const viewport=camera.viewport.toGlobal(renderWidth,renderHeight),matrix=camera.getTransformationMatrix();
   Vector3.ProjectToRef(rim,Matrix.IdentityReadOnly,matrix,viewport,rimScreen);Vector3.ProjectToRef(anchor,Matrix.IdentityReadOnly,matrix,viewport,anchorScreen);

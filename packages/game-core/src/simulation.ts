@@ -8,10 +8,11 @@ import {createPractice, stepPractice, configurePractice, type PracticeState} fro
 import { createMotion, cancelCrossover, beginGather, beginCatch, cancelMotion, queueRelease, markReleased, advanceControlledMotion, controlledPosition, updateUnownedMotion, dribblePoint, releaseSocket, type BallMotion, type ReleaseIntent } from './motion';
 import { playerPassLaunch, passDirection, type PlayerPassLaunch } from './pass';
 import { evaluateAcquisition, outsideAcquisitionVolumes, acquisitionEligibility, passCatchPoint, type AcquisitionEvent, type AcquisitionBlock } from './acquisition';
-import { COURT, PHYSICS, DUMMY, PRACTICE, PASS, PLAYER, DRIBBLE, MOVEMENT } from './court';
+import { COURT, PHYSICS, DUMMY, PRACTICE, PASS, PLAYER, DRIBBLE, MOVEMENT, SHOT_TIMING } from './court';
+import {evaluateShotTiming,shotDistance} from './shotTiming';
 import { advanceBall, isBallPathClear } from './physics';
 export type Vec = { x: number; y: number; z: number };
-export const CFG = { dt: 1 / 60, gravity: 9.81, speed: MOVEMENT.walk, sprint: MOVEMENT.run, jump: 4.3, eye: PLAYER.eyeHeight, rim: COURT.rim, rimRadius: COURT.rimRadius, ballRadius: COURT.ballRadius, idealCharge: .7, maxCharge: 1.2, arc: 6.75 };
+export const CFG = { dt: 1 / 60, gravity: 9.81, speed: MOVEMENT.walk, sprint: MOVEMENT.run, jump: 4.3, eye: PLAYER.eyeHeight, rim: COURT.rim, rimRadius: COURT.rimRadius, ballRadius: COURT.ballRadius, idealCharge: SHOT_TIMING.idealCharge, maxCharge: SHOT_TIMING.maxCharge, arc: 6.75 };
 export type Owner = 'player' | 'dummy' | 'none';
 export type FlightKind = 'shot' | 'pass' | null;
 export type Phase = 'HELD' | 'CHARGING' | 'PASS_CHARGING' | 'IN_FLIGHT' | 'RESOLVING';
@@ -27,11 +28,12 @@ function fireShot(s: State, input: Input, charge:number) {
   s.charge=charge;
   if (s.owner !== 'player' || s.phase !== 'CHARGING') { if(s.owner !== 'player') cancelCharge(s); return false; }
   s.ball=releaseSocket(s,{kind:'shot',input,charge},'player');
-  s.ballVelocity=assistedShotVelocity(s.ball,input.yaw,input.pitch,charge);
-  const error = Math.max(-1,Math.min(1,(charge-CFG.idealCharge)/.5));
+  const distance=shotDistance(s.player),timing=evaluateShotTiming(charge,distance);
+  s.ballVelocity=assistedShotVelocity(s.ball,input.yaw,input.pitch,charge,distance);
+  const error=timing.error;
   s.shotTouched=false; s.shotExited=false; s.acquisitionBlock='RELEASE_LOCK';
   s.owner = 'none'; s.flightKind = 'shot'; s.passFrom = 'player'; s.releaseAge = 0; s.looseAge = 0;
-  s.phase = 'IN_FLIGHT'; s.flight = 0; s.shotId++; s.attempts++; s.resolved = false; s.shotPoints = pointsAt(s.player); s.lastTiming = Math.max(0, 1 - Math.abs(error)); s.message = Math.abs(error) < .1 ? 'PERFECT RELEASE' : error < 0 ? 'EARLY RELEASE' : 'LATE RELEASE';
+  s.phase = 'IN_FLIGHT'; s.flight = 0; s.shotId++; s.attempts++; s.resolved = false; s.shotPoints = pointsAt(s.player); s.lastTiming = Math.max(0, 1 - Math.abs(error)); s.message = timing.perfect ? 'PERFECT RELEASE' : error < 0 ? 'EARLY RELEASE' : 'LATE RELEASE';
   return true;
 }
 export function resolve(s: State, made: boolean,actorId='player') { if (s.resolved) return; s.resolved = true; if (made) { emitGameEvent(s,'net',COURT.rim,1,actorId,`shot:${s.shotId}`); s.score += s.shotPoints; s.made++; s.message = `SWISH · +${s.shotPoints}`; } else s.message = '아쉽네요. 조준과 릴리스를 조절해보세요'; makeLoose(s); }
