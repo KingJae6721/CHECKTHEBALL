@@ -2,6 +2,7 @@ import type {MatchState} from '../../../packages/game-core/src/match';
 import {toggleScreen} from '../../../packages/game-core/src/screen';
 import {createNameplate} from './createNameplate';
 import {createIndoorGym} from './createIndoorGym';
+import {createHoopShotMeter} from './createHoopShotMeter';
 import {createNet} from './createNet';
 import {AudioManager} from './audioManager';
 import {AudioTimeline,MotionSounds} from './audioTimeline';
@@ -35,6 +36,7 @@ export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,
  const engine=new Engine(canvas,true,{preserveDrawingBuffer:false,stencil:true});engine.setHardwareScalingLevel(Math.max(1,window.devicePixelRatio/1.6));
  const scene=new Scene(engine);
  const camera=new UniversalCamera('eyes',new Vector3(0,CFG.eye,-1.5),scene);camera.minZ=.06;camera.fov=1.22;camera.inputs.clear();
+ const hoopMeter=createHoopShotMeter(canvas,scene,camera);
  const gym=createIndoorGym(scene);
  function mat(name:string,hex:string,emission=0){const m=new StandardMaterial(name,scene);m.diffuseColor=Color3.FromHexString(hex);m.specularColor=new Color3(.08,.08,.08);m.emissiveColor=m.diffuseColor.scale(emission);return m;}
  const white=mat('markings','#efe8d6',.1),metal=mat('metal','#454c45'),orange=mat('rim','#e97132',.2),ballmat=mat('basketball','#d77a32'),dark=mat('seams','#4d321e');
@@ -150,7 +152,7 @@ export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,
   if(!online)audible.push({id:'dummy',position:DUMMY.position,vy:0,motion:state.dummyMotion,locomotion:dummyLocomotion,owns:state.owner==='dummy',grounded:true,near:false,block:false});
   motionSounds.retain(audible.map(a=>a.id));for(const actor of audible)for(const cue of motionSounds.sample(actor,now,!online))audio.play(cue,camera.position,input.yaw,now);
  }else{audioTimeline.discard();motionSounds.clear();}
- camera.getViewMatrix();camera.getProjectionMatrix();const labelActor=onlineFrame?.players.find(a=>a.id!==online?.room.sessionId);opponentLabel?.update(labelActor?.nickname||'Opponent',!!labelActor&&!!online?.connected,now);dummy?.updateLabel(now);
+ camera.getViewMatrix();camera.getProjectionMatrix();hoopMeter.update(state,locked&&!document.hidden&&(!online||online.canPlay));const labelActor=onlineFrame?.players.find(a=>a.id!==online?.room.sessionId);opponentLabel?.update(labelActor?.nickname||'Opponent',!!labelActor&&!!online?.connected,now);dummy?.updateLabel(now);
  scene.render();frameDiagnostics.end(performance.now(),camera.rotation.y,camera.rotation.x,input.yaw,input.pitch);online?.recordFrame(frameDiagnostics.lastFrameMs,performance.now()-now);if(now-lastUI>50){update();lastUI=now;}});
  update();
  return {reset,scenario,setAudio(settings:AudioSettings){audio.setSettings(settings);},unlockAudio(){void unlockAudio();},pause(reason='MENU'){clear(reason);if(document.pointerLockElement===canvas)document.exitPointerLock();update();},setCameraMotion(enabled:boolean){cameraMotionEnabled=enabled;resetCameraMotion(cameraMotion);camera.position.set(state.player.x,state.player.y+CFG.eye,state.player.z);},async start(){clearAudio();audioTimeline=new AudioTimeline();audioTimeline.ingest(online?.latest?.events??state.events.recent,performance.now());void unlockAudio();try{await canvas.requestPointerLock();}catch{if(!disposed)onError('마우스를 잠글 수 없습니다. 새 탭에서 게임을 열고 다시 눌러주세요.');}},dispose(){if(disposed)return;disposed=true;clearAudio();audio.dispose();liveRuntimes.set(canvas,Math.max(0,(liveRuntimes.get(canvas)??1)-1));if(inputTimer!==undefined)window.clearInterval(inputTimer);if(online)delete (window as unknown as {checkTheBallNetwork?:()=>unknown}).checkTheBallNetwork;if(document.pointerLockElement===canvas)document.exitPointerLock();for(const[t,k,f]of listeners)t.removeEventListener(k,f);engine.stopRenderLoop();scene.dispose();engine.dispose();}};
