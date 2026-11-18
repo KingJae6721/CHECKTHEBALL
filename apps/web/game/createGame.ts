@@ -1,6 +1,7 @@
 import type {MatchState} from '../../../packages/game-core/src/match';
 import {toggleScreen} from '../../../packages/game-core/src/screen';
 import {createNameplate} from './createNameplate';
+import {createIndoorGym} from './createIndoorGym';
 import {createNet} from './createNet';
 import {AudioManager} from './audioManager';
 import {AudioTimeline,MotionSounds} from './audioTimeline';
@@ -22,7 +23,7 @@ import { controlledPosition, characterPose } from '../../../packages/game-core/s
 import { acquisitionVolumes } from '../../../packages/game-core/src/acquisition';
 import { createDummy } from './createDummy';
 import { COURT, BODY, HEAD_BOB, DEFENSE, DUMMY, ACQUISITION, rimSegments } from '../../../packages/game-core/src/court';
-import { Engine, Scene, Color3, Color4, Vector3, UniversalCamera, HemisphericLight, DirectionalLight, MeshBuilder, StandardMaterial, Mesh } from '@babylonjs/core';
+import { Engine, Scene, Color3, Vector3, UniversalCamera, MeshBuilder, StandardMaterial, Mesh } from '@babylonjs/core';
 import { CFG, createState, zeroInput, stepGame, startCharge, releaseShot, cancelAllCharges, resetState, startPassCharge, releasePass, isAimingAtDummy, type State } from '../../../packages/game-core/src/simulation';
 export type Snapshot = Pick<State,'score'|'attempts'|'made'|'phase'|'charge'|'message'|'lastTiming'|'owner'|'flightKind'|'passCharge'|'practice'|'defense'> & { screenActive?:boolean;diagnostics?:{render:string;net?:string};audioReady?:boolean;audioFailed?:boolean; online?:{match?:MatchState|null;remainingMs?:number;roomId:string;selfId:string;ownerId:string|null;count:number;connected:boolean;status:string;pingMs?:number|null;pingStatus?:string;players:{id:string;nickname?:string;score:number;attempts:number;made:number}[]}; distance: number; locked: boolean; aimingDummy: boolean; debug?: { render:string;net?:string; bodyMotion:string; defensePosition:string; visible: boolean; blocked: State['acquisitionBlock']; event: State['acquisitionEvent']; speed: number; touched: boolean; exited: boolean; pass: State['lastPlayerPass']; motion:{player:string;dummy:string;locomotion:string;phase:number;period:number;pending:boolean;ballY:number;ballCount:number;playerJoints:number;dummyJoints:number;handError:number;shooting:number;kneeBend:number;playerY:number;hand:string;crossover:string;crossProgress:number;bodyYaw:number} }; };
 const liveRuntimes=new WeakMap<HTMLCanvasElement,number>();
@@ -32,38 +33,24 @@ export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,
  const audio=new AudioManager(),dummyLocomotion=createLocomotion();let audioTimeline=new AudioTimeline();const motionSounds=new MotionSounds();
  const clearAudio=()=>{audio.stop();audioTimeline.discard();motionSounds.clear();};
  const engine=new Engine(canvas,true,{preserveDrawingBuffer:false,stencil:true});engine.setHardwareScalingLevel(Math.max(1,window.devicePixelRatio/1.6));
- const scene=new Scene(engine);scene.clearColor=new Color4(.065,.09,.12,1);scene.fogMode=Scene.FOGMODE_EXP2;scene.fogDensity=.012;scene.fogColor=new Color3(.065,.09,.12);
+ const scene=new Scene(engine);
  const camera=new UniversalCamera('eyes',new Vector3(0,CFG.eye,-1.5),scene);camera.minZ=.06;camera.fov=1.22;camera.inputs.clear();
- const ambient=new HemisphericLight('sky',new Vector3(0,1,0),scene);ambient.intensity=.85;ambient.groundColor=new Color3(.18,.22,.25);
- const sun=new DirectionalLight('sun',new Vector3(-.4,-1,.5),scene);sun.intensity=1.25;sun.diffuse=new Color3(1,.89,.72);
+ const gym=createIndoorGym(scene);
  function mat(name:string,hex:string,emission=0){const m=new StandardMaterial(name,scene);m.diffuseColor=Color3.FromHexString(hex);m.specularColor=new Color3(.08,.08,.08);m.emissiveColor=m.diffuseColor.scale(emission);return m;}
- const asphalt=mat('asphalt','#27343b'),court=mat('court','#557e7b'),paint=mat('paint','#c9734d'),white=mat('markings','#e0e4d5',.15),metal=mat('metal','#283942'),orange=mat('rim','#ff7445',.35),ballmat=mat('basketball','#d97c3c'),dark=mat('seams','#432b20'),concrete=mat('surround','#202e34');
- const floor=MeshBuilder.CreateGround('surround',{width:70,height:65},scene);floor.material=concrete;floor.position.z=0;floor.position.y=COURT.floorY-.001;
- const slab=MeshBuilder.CreateGround('court',{width:15,height:14.5},scene);slab.position.y=COURT.floorY;slab.material=court;
- const key=MeshBuilder.CreateGround('key',{width:4.9,height:5.8},scene);key.position.set(0,COURT.floorY+.001,4.35);key.material=paint;
+ const white=mat('markings','#efe8d6',.1),metal=mat('metal','#454c45'),orange=mat('rim','#e97132',.2),ballmat=mat('basketball','#d77a32'),dark=mat('seams','#4d321e');
  function line(name:string,pts:Vector3[],material=white,radius=.025){const m=MeshBuilder.CreateTube(name,{path:pts,radius,tessellation:6},scene);m.material=material;return m;}
- function segment(name:string,x1:number,z1:number,x2:number,z2:number){return line(name,[new Vector3(x1,.035,z1),new Vector3(x2,.035,z2)]);}
- segment('baseline',-7.35,7.1,7.35,7.1);segment('left',-7.35,-7.1,-7.35,7.1);segment('right',7.35,-7.1,7.35,7.1);segment('half',-7.35,-7.1,7.35,-7.1);
- segment('key-left',-2.45,7.1,-2.45,1.45);segment('key-right',2.45,7.1,2.45,1.45);segment('free-throw',-2.45,1.45,2.45,1.45);
- function arc(name:string,cx:number,cz:number,r:number,start:number,end:number){const pts=[];for(let i=0;i<=100;i++){const a=start+(end-start)*i/100;pts.push(new Vector3(cx+Math.sin(a)*r,.04,cz+Math.cos(a)*r));}line(name,pts);}
- arc('two-point-arc',0,CFG.rim.z,CFG.arc,Math.acos((7.1-CFG.rim.z)/CFG.arc),2*Math.PI-Math.acos((7.1-CFG.rim.z)/CFG.arc));
- arc('free-throw-circle',0,1.45,1.8,0,2*Math.PI);arc('center',0,-7.1,1.8,-Math.PI/2,Math.PI/2);
  const pole=MeshBuilder.CreateCylinder('pole',{height:4.8,diameter:.18},scene);pole.position.set(0,2.4,7.5);pole.material=metal;
  const arm=MeshBuilder.CreateBox('support',{width:.15,height:.15,depth:1.5},scene);arm.position.set(0,3.8,6.9);arm.material=metal;
- const boardmat=mat('board','#bed4ce');boardmat.alpha=.6;
+ const boardmat=mat('board','#eee5cd');
  const board=MeshBuilder.CreateBox('backboard',{width:COURT.board.width,height:COURT.board.height,depth:COURT.board.depth},scene);board.position.copyFromFloats(COURT.board.center.x,COURT.board.center.y,COURT.board.center.z);board.material=boardmat;
  const boardPoint=(x:number,y:number)=>new Vector3(COURT.board.center.x+x,COURT.board.center.y+y,COURT.board.center.z-COURT.board.depth/2-.005);
- line('board-border',[boardPoint(-COURT.board.width/2,-COURT.board.height/2),boardPoint(-COURT.board.width/2,COURT.board.height/2),boardPoint(COURT.board.width/2,COURT.board.height/2),boardPoint(COURT.board.width/2,-COURT.board.height/2),boardPoint(-COURT.board.width/2,-COURT.board.height/2)]);
- line('board-square',[boardPoint(-.3,-.45),boardPoint(-.3,0),boardPoint(.3,0),boardPoint(.3,-.45)]);
+ line('board-border',[boardPoint(-COURT.board.width/2,-COURT.board.height/2),boardPoint(-COURT.board.width/2,COURT.board.height/2),boardPoint(COURT.board.width/2,COURT.board.height/2),boardPoint(COURT.board.width/2,-COURT.board.height/2),boardPoint(-COURT.board.width/2,-COURT.board.height/2)],metal);
+ line('board-square',[boardPoint(-.3,-.45),boardPoint(-.3,0),boardPoint(.3,0),boardPoint(.3,-.45)],gym.markings);
  const rim=MeshBuilder.CreateTorus('rim',{diameter:CFG.rimRadius*2,thickness:COURT.rimTubeRadius*2,tessellation:COURT.rimSegments},scene);rim.position.copyFromFloats(CFG.rim.x,CFG.rim.y,CFG.rim.z);rim.material=orange;
  const net=createNet(scene,white);
  const ball=MeshBuilder.CreateSphere('ball',{diameter:CFG.ballRadius*2,segments:20},scene);ball.material=ballmat;
  for(const rot of[0,Math.PI/2]){const seam=MeshBuilder.CreateTorus('seam',{diameter:.239,thickness:.006,tessellation:40},scene);seam.parent=ball;seam.rotation.x=rot;seam.material=dark;}
  const seam=MeshBuilder.CreateTorus('seam',{diameter:.239,thickness:.006,tessellation:40},scene);seam.parent=ball;seam.rotation.z=Math.PI/2;seam.material=dark;
- // Court fencing, light posts and a low-poly city. No external assets required.
- for(const x of[-9,9]){for(let z=-9;z<=9;z+=3){const p=MeshBuilder.CreateCylinder('fence-post',{height:3,diameter:.055},scene);p.position.set(x,1.5,z);p.material=metal;}for(const y of[.4,1,1.6,2.2,2.9])line('fence-wire',[new Vector3(x,y,-9),new Vector3(x,y,9)],metal,.009);}
- for(let i=0;i<18;i++){const x=(i%2?1:-1)*(12+(i%4)*3);const z=-16+Math.floor(i/2)*5;const h=3+(i*7%9);const b=MeshBuilder.CreateBox('building',{width:3.7,height:h,depth:3.5},scene);b.position.set(x,h/2,z);b.material=i%2?asphalt:metal;}
- const glow=mat('lamp','#ffe0ae',1);for(const x of[-8.4,8.4]){const p=MeshBuilder.CreateCylinder('light-post',{height:7,diameter:.1},scene);p.position.set(x,3.5,5);p.material=metal;const l=MeshBuilder.CreateBox('lamp',{width:1.1,height:.12,depth:.5},scene);l.position.set(x,7,5);l.material=glow;}
  // Development-only collider overlay; these meshes never drive simulation.
  const debugMeshes: Mesh[]=[];
  const acquisitionMeshes: Mesh[]=[];
@@ -91,7 +78,7 @@ export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,
   for(let i=0;i<=BODY.iterations;i++){const ray=MeshBuilder.CreateLines('body-contact-'+i,{points:[Vector3.Zero(),new Vector3(0,0,.001)],updatable:true},scene);ray.color=i===BODY.iterations?new Color3(1,.3,.2):new Color3(.3,1,.6);ray.isPickable=false;ray.setEnabled(false);bodyNormals.push(ray);debugMeshes.push(ray);}
  }
  const fixedCharacters=Array.from({length:online?0:2},(_,i)=>createCharacter(scene,{name:'fixed-screen-'+i,firstPerson:false,appearance}));for(const rig of fixedCharacters)rig.root.setEnabled(false);
- const nameOccluders=scene.meshes.filter((mesh):mesh is Mesh=>mesh instanceof Mesh&&['backboard','pole','support','building','fence-post','fence-wire','light-post'].includes(mesh.name));
+ const nameOccluders=[...gym.occluders,...scene.meshes.filter((mesh):mesh is Mesh=>mesh instanceof Mesh&&['backboard','pole','support'].includes(mesh.name))];
  const dummy=online?null:createDummy(scene,appearance,nameOccluders);
  const opponent=online?createCharacter(scene,{name:'remote-player',firstPerson:false,appearance}):null;opponent?.root.setEnabled(false);
  const opponentLabel=opponent?createNameplate(scene,opponent.root,'opponent-name',nameOccluders):null;

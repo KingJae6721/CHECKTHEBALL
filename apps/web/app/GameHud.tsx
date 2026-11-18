@@ -8,7 +8,7 @@ export default function GameHud({state,onReset}:{state:Snapshot;onReset:()=>void
  const accuracy=state.attempts?Math.round(state.made/state.attempts*100):0;
  return <>
   <aside className="session"><div className="eyebrow">{state.online?'YOUR STATS':'YOUR SESSION'}</div><div className="score"><strong>{String(state.online?state.online.players.find(p=>p.id===state.online!.selfId)?.score??0:state.score).padStart(2,'0')}</strong><span>POINTS</span></div><div className="stats"><div><strong>{state.made}<small> / {state.attempts}</small></strong><span>MADE / SHOTS</span></div><div><strong>{accuracy}<small>%</small></strong><span>ACCURACY</span></div></div>{state.online&&<div className="online-scores">{state.online.players.map(p=><div key={p.id}>{p.id===state.online!.selfId?'나':'상대'} · {p.score}점 · {p.made}/{p.attempts}</div>)}</div>}<button className="reset" disabled={!!state.online} onClick={onReset}><span>↺</span> 세션 초기화 <kbd>R</kbd></button></aside>
-  <div className="court-label"><span className="eyebrow">THE NEIGHBORHOOD</span><h1>내 코트, 내 리듬.</h1><p>FIRST PERSON BASKETBALL · SPRINT 01</p></div>
+  <div className="court-label"><span className="eyebrow">THE FIELDHOUSE</span><h1>내 코트, 내 리듬.</h1><p>FIRST PERSON BASKETBALL · SPRINT 01</p></div>
   {state.diagnostics&&<aside className="performance-debug" aria-label="Performance diagnostics"><strong>PERFORMANCE ? F3</strong><pre>{state.diagnostics.render}{state.diagnostics.net&&'\n'+state.diagnostics.net}</pre><small>Console: window.checkTheBallNetwork()</small></aside>}
   <div className="crosshair"><span/><span/></div>
   {state.screenActive&&<div className="screen-status" role="status">스크린 유지 · 이동하면 해제</div>}
