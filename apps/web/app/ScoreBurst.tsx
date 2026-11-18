@@ -2,8 +2,9 @@
 import {useEffect,useRef} from 'react';
 import {scoreGains,type ScorePlayer} from '../game/scoreboard';
 import type {Snapshot} from '../game/createGame';
+import {DEFAULT_PLAYER_COLOR,playerPalette,type PlayerColor} from '../../../packages/protocol/src/playerColor';
 export const SCORE_BURST={durationMs:1150,reducedMotionMs:220,maxVisible:4} as const;
-export default function ScoreBurst({state}:{state:Snapshot}){
+export default function ScoreBurst({state,color=DEFAULT_PLAYER_COLOR}:{state:Snapshot;color?:PlayerColor}){
  const layer=useRef<HTMLDivElement>(null),previous=useRef<{scope:string;players:ScorePlayer[]}|null>(null),active=useRef(new Map<HTMLElement,Animation>()),skipNext=useRef(false);
  const scope=state.online?`${state.online.roomId}:${state.online.match?.id??'practice'}`:'offline';
  const players:ScorePlayer[]=state.online?.players??[{id:'offline',score:state.score}];
@@ -20,6 +21,7 @@ export default function ScoreBurst({state}:{state:Snapshot}){
    const bounds=target.getBoundingClientRect(),area=container.getBoundingClientRect();if(!bounds.width||!bounds.height)continue;
    const dx=bounds.left+bounds.width/2-(area.left+area.width/2),dy=bounds.top+bounds.height/2-(area.top+area.height/2);
    const node=document.createElement('span');node.className=`score-burst ${state.online&&gain.id!==state.online.selfId?'opponent':'self'}`;node.textContent=`+${gain.points}`;container.appendChild(node);
+   const tint=playerPalette(state.online?players.find(p=>p.id===gain.id)?.color:color).ui;node.style.color=tint;node.style.textShadow=`0 3px 3px #091c24,0 0 24px ${tint}66`;
    if(typeof node.animate!=='function'){node.remove();continue;}
    const center='translate(-50%,-50%)',destination=`${center} translate(${dx}px,${dy}px) scale(.15)`;
    const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;

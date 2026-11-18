@@ -1,4 +1,5 @@
-export type ScorePlayer={id:string;nickname?:string;score:number};
+import type {PlayerColor} from '../../../packages/protocol/src/playerColor';
+export type ScorePlayer={id:string;color?:PlayerColor;nickname?:string;score:number};
 export function scoreboardSides(players:ScorePlayer[],selfId:string){
  return {self:players.find(p=>p.id===selfId),opponent:players.find(p=>p.id!==selfId)};
 }

@@ -2,12 +2,15 @@ import {createCharacterRig} from './characterRig';
 import { Color3, Mesh, MeshBuilder, Quaternion, Scene, StandardMaterial, TransformNode, Vector3 } from '@babylonjs/core';
 import { CHARACTER, DUMMY, GAIT } from '../../../packages/game-core/src/court';
 import type { CharacterPose } from '../../../packages/game-core/src/motion';
+import type {CharacterPalette} from './characterGeometry';
 
 // Display adapter only. No meshes/sockets are used to decide gameplay.
-export function createLegacyCharacter(scene:Scene,options:{name:string;firstPerson:boolean}) {
+export function createLegacyCharacter(scene:Scene,options:{name:string;firstPerson:boolean;colors?:Partial<CharacterPalette>}) {
   const prefix=options.name,rig=createCharacterRig(scene,prefix),{root,joints}=rig;
   const material=(name:string,hex:string)=>{const m=new StandardMaterial(prefix+':'+name,scene);m.diffuseColor=Color3.FromHexString(hex);m.specularColor=new Color3(.12,.12,.12);return m;};
   const uniform=material('uniform',options.firstPerson?'#475f69':'#8fbfb4'),skin=material('skin','#d8b08b'),trousers=material('trousers','#283d48'),shoe=material('shoe','#1d2b33');
+  function setColors(colors:Partial<CharacterPalette>){if(colors.uniform)uniform.diffuseColor=Color3.FromHexString(colors.uniform);if(colors.shorts)trousers.diffuseColor=Color3.FromHexString(colors.shorts);if(colors.skin)skin.diffuseColor=Color3.FromHexString(colors.skin);if(colors.shoe)shoe.diffuseColor=Color3.FromHexString(colors.shoe);}
+  if(options.colors)setColors(options.colors);
   const box=(name:string,parent:TransformNode,width:number,height:number,depth:number,x:number,y:number,z:number,mat:StandardMaterial,body=false)=>{
     const mesh=MeshBuilder.CreateBox(prefix+':'+name,{width,height,depth},scene);mesh.parent=parent;mesh.position.set(x,y,z);mesh.material=mat;mesh.isPickable=false;if(body&&options.firstPerson)mesh.setEnabled(false);return mesh;
   };
@@ -41,5 +44,5 @@ export function createLegacyCharacter(scene:Scene,options:{name:string;firstPers
     box(name+'Foot',ankle,CHARACTER.footWidth,CHARACTER.footHeight,CHARACTER.footLength,0,-CHARACTER.footHeight/2,.035,shoe);
   }
   function update(pose:CharacterPose){rig.update(pose);const showBody=!pose.attacking;if(options.firstPerson&&bodyVisible!==showBody){bodyVisible=showBody;pelvisMesh.setEnabled(showBody);torsoMesh.setEnabled(showBody);for(const leg of legs)leg.setEnabled(showBody);}}
- return {...rig,update,meshes:root.getChildMeshes(false),skeleton:null};
+ return {...rig,update,setColors,meshes:root.getChildMeshes(false),skeleton:null};
 }

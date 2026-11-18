@@ -1,4 +1,5 @@
 'use client';
+import {DEFAULT_PLAYER_COLOR,PLAYER_COLOR_KEY,playerColor,type PlayerColor} from '../../../packages/protocol/src/playerColor';
 import {useEffect,useRef,useState} from 'react';
 import OnlineMenu,{type OnlinePage} from './OnlineMenu';
 import type {RoomCreation} from '../../../packages/protocol/src/rooms';
@@ -22,7 +23,8 @@ export default function Game(){
  const [screen,setScreen]=useState<MenuScreen>('HOME'),[panel,setPanel]=useState<'MAIN'|'SETTINGS'|'HELP'|'CREDITS'>('MAIN');
  const [state,setState]=useState(initial),[session,setSession]=useState<OnlineSession>(),[factoryReady,setFactoryReady]=useState(false),[sceneReady,setSceneReady]=useState(false),[hasPlayed,setHasPlayed]=useState(false);
  const [nickname,setNickname]=useState(''),[nicknameError,setNicknameError]=useState(''),[profileReady,setProfileReady]=useState(false),[roomId,setRoomId]=useState(''),[roomMode,setRoomMode]=useState<RoomMode>('duel'),[scenario,setScenario]=useState<PracticeMode>('PASS'),[error,setError]=useState('');
- const [audio,setAudio]=useState<AudioSettings>(()=>parseAudioSettings(null)),[camera,setCamera]=useState(HEAD_BOB.enabled);const prefs=useRef({audio:parseAudioSettings(null),camera:HEAD_BOB.enabled});
+ const [color,setColor]=useState<PlayerColor>(DEFAULT_PLAYER_COLOR);
+ const [audio,setAudio]=useState<AudioSettings>(()=>parseAudioSettings(null)),[camera,setCamera]=useState(HEAD_BOB.enabled);const prefs=useRef<{audio:AudioSettings;camera:boolean;color:PlayerColor}>({audio:parseAudioSettings(null),camera:HEAD_BOB.enabled,color:DEFAULT_PLAYER_COLOR});
  const music=useRef<BackgroundMusic|null>(null);
  useEffect(()=>{const bgm=new BackgroundMusic();music.current=bgm;bgm.setSettings(prefs.current.audio);bgm.setHidden(document.hidden);const visibility=()=>bgm.setHidden(document.hidden);document.addEventListener('visibilitychange',visibility);return()=>{document.removeEventListener('visibilitychange',visibility);bgm.dispose();if(music.current===bgm)music.current=null;};},[]);
  useEffect(()=>{music.current?.setPlayingMatch(screen==='PLAYING'&&state.online?.match?.stage==='PLAYING');},[screen,state.online?.match?.stage]);
@@ -39,13 +41,14 @@ export default function Game(){
   return remove;
  },[profileReady]);
  const playing=screen==='PLAYING',connecting=screen==='CONNECTING';
- useEffect(()=>{const p=loadPreferences(storage(),'게스트'+Math.floor(1000+Math.random()*9000));setNickname(p.nickname);setAudio(p.audio);setCamera(p.camera);prefs.current={audio:p.audio,camera:p.camera};music.current?.setSettings(p.audio);setProfileReady(true);},[]);
+ useEffect(()=>{const p=loadPreferences(storage(),'게스트'+Math.floor(1000+Math.random()*9000));setNickname(p.nickname);setAudio(p.audio);setCamera(p.camera);let savedColor=DEFAULT_PLAYER_COLOR;try{savedColor=playerColor(storage()?.getItem(PLAYER_COLOR_KEY));}catch{}setColor(savedColor);prefs.current={audio:p.audio,camera:p.camera,color:savedColor};music.current?.setSettings(p.audio);setProfileReady(true);},[]);
  useEffect(()=>{let cancelled=false;import('../game/createGame').then(m=>{if(!cancelled){factory.current=m.createGame;setFactoryReady(true);}}).catch(()=>{if(!cancelled)setError('게임 파일을 불러오지 못했습니다. 새로고침해주세요.');});return()=>{cancelled=true;};},[]);
  useEffect(()=>()=>{gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;sessionRef.current?.close();sessionRef.current=undefined;},[]);
  useEffect(()=>{if(chatOpen||playing&&state.locked)return;const id=requestAnimationFrame(()=>document.querySelector<HTMLElement>('[data-menu-title]')?.focus());return()=>cancelAnimationFrame(id);},[screen,panel,state.locked,chatOpen,onlinePage]);
  useEffect(()=>{const escape=(e:KeyboardEvent)=>{if(e.code==='Escape'&&!document.pointerLockElement&&panel!=='MAIN'){setPanel('MAIN');e.preventDefault();}};window.addEventListener('keydown',escape);return()=>window.removeEventListener('keydown',escape);},[panel]);
  function saveName(){const v=validateNickname(nickname);setNicknameError(v.error??'');if(v.error)return false;setNickname(v.name);savePreference(storage(),NICKNAME_KEY,v.name);return true;}
  function changeAudio(next:AudioSettings){prefs.current.audio=next;setAudio(next);savePreference(storage(),AUDIO_STORAGE_KEY,JSON.stringify(next));runtime.current?.setAudio(next);music.current?.setSettings(next);void music.current?.activate();}
+ function changeColor(next:PlayerColor){const selected=playerColor(next);prefs.current.color=selected;setColor(selected);savePreference(storage(),PLAYER_COLOR_KEY,selected);runtime.current?.setCharacterColor(selected);}
  function changeCamera(next:boolean){prefs.current.camera=next;setCamera(next);savePreference(storage(),CAMERA_KEY,String(next));runtime.current?.setCameraMotion(next);}
  function openPanel(next:typeof panel){gate.current.cancel();if(connecting){setScreen('FRIENDS');}runtime.current?.pause();setPanel(next);}
  function home(){setChatOpen(false);gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;const left=sessionRef.current?.close();sessionRef.current=undefined;setSession(undefined);setSceneReady(false);setState(initial);setHasPlayed(false);setError('');setPanel('MAIN');setScreen('HOME');return left;}
@@ -57,13 +60,13 @@ export default function Game(){
   if(runtime.current)return false;
   if(!factory.current||!canvas.current){setError('코트를 준비 중입니다. 잠시 후 다시 눌러주세요.');return false;}
   const id=++generation.current;setState(initial);setHasPlayed(false);setError('');canvas.current.hidden=false;
-  try{const rt=factory.current(canvas.current,s=>{if(id===generation.current){setState(s);if(s.locked)setHasPlayed(true);}},e=>{if(id===generation.current)setError(e);},online);runtime.current=rt;rt.setAudio(prefs.current.audio);rt.setCameraMotion(prefs.current.camera);if(!online)rt.scenario(scenario);setSceneReady(true);setPanel('MAIN');setScreen('PLAYING');if(autoStart)void rt.start();return true;}
+  try{const rt=factory.current(canvas.current,s=>{if(id===generation.current){setState(s);if(s.locked)setHasPlayed(true);}},e=>{if(id===generation.current)setError(e);},online,prefs.current.color);runtime.current=rt;rt.setAudio(prefs.current.audio);rt.setCameraMotion(prefs.current.camera);if(!online)rt.scenario(scenario);setSceneReady(true);setPanel('MAIN');setScreen('PLAYING');if(autoStart)void rt.start();return true;}
   catch{generation.current++;runtime.current?.dispose();runtime.current=null;canvas.current.hidden=true;setError('코트를 열지 못했습니다. 하드웨어 가속과 WebGL 지원을 확인해주세요.');return false;}
  }
  async function join(create:boolean,target=roomId,settings?:RoomCreation){
   if(!saveName())return;void music.current?.activate();if(!create){const invalid=roomIdError(target);if(invalid){setError(invalid);return;}}
   const token=gate.current.begin();if(token===null)return;setError('');setScreen('CONNECTING');
-  try{const {connectOnline}=await import('../game/onlineClient');if(!gate.current.current(token))return;const connected=await connectOnline(create?undefined:target.trim(),validateNickname(nickname).name,settings?.mode??roomMode,settings);
+  try{const {connectOnline}=await import('../game/onlineClient');if(!gate.current.current(token))return;const connected=await connectOnline(create?undefined:target.trim(),validateNickname(nickname).name,settings?.mode??roomMode,settings,prefs.current.color);
    if(!gate.current.accept(token,connected))return;
    if(!factory.current){connected.close();setScreen('FRIENDS');setError('코트를 준비 중입니다. 다시 눌러주세요.');return;}
    sessionRef.current=connected;setSession(connected);setRoomId(connected.room.roomId);
@@ -85,9 +88,9 @@ export default function Game(){
   </div></header>
   {playing&&state.online&&panel==='MAIN'&&<OnlineScoreboard key={state.online.roomId+':'+(state.online.match?.id??0)} players={state.online.players} selfId={state.online.selfId} ownerId={state.online.ownerId}/>}
   {playing&&(state.locked||chatOpen)&&panel==='MAIN'&&<GameHud state={state} onReset={()=>runtime.current?.reset()}/>}
-  {playing&&<ScoreBurst state={state}/>}
+  {playing&&<ScoreBurst state={state} color={color}/>}
   {showCard&&<div className="menu-layer"><section className="menu-card" aria-label={panel==='SETTINGS'?'설정':panel==='HELP'?'조작 안내':panel==='CREDITS'?'크레딧':'시작 메뉴'}>
-   {panel==='SETTINGS'?<Settings onMusic={()=>void music.current?.activate()} audio={audio} camera={camera} onAudio={changeAudio} onCamera={changeCamera} onBack={()=>setPanel('MAIN')}/>:
+   {panel==='SETTINGS'?<Settings color={color} onColor={changeColor} onMusic={()=>void music.current?.activate()} audio={audio} camera={camera} onAudio={changeAudio} onCamera={changeCamera} onBack={()=>setPanel('MAIN')}/>:
     panel==='HELP'?<Help online={!!session} onBack={()=>setPanel('MAIN')}/>:
     panel==='CREDITS'?<Credits onBack={()=>setPanel('MAIN')}/>:
     screen==='HOME'?<><span className="eyebrow">PICK UP. PLAY.</span><h1 tabIndex={-1} data-menu-title>내 코트, 내 리듬.</h1><p>친구와 한 판, 혼자서 한 번 더.<br/>가볍게 시작하는 1인칭 농구.</p>

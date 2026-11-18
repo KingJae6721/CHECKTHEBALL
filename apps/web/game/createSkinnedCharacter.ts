@@ -3,6 +3,7 @@ import {createCharacterRig} from './characterRig';
 import {BONE_NAMES,DEFAULT_PALETTE,generateCharacterGeometry,type CharacterPalette} from './characterGeometry';
 import type {CharacterPose} from '../../../packages/game-core/src/motion';
 const assets=new WeakMap<Scene,{material:StandardMaterial;geometries:Map<string,{geometry:Geometry;ranges:{indexStart:number;indexCount:number}[]}>}>();
+function resolvePalette(colors?:Partial<CharacterPalette>):CharacterPalette{const palette={...DEFAULT_PALETTE};for(const key of Object.keys(palette) as (keyof CharacterPalette)[])if(colors?.[key]!==undefined)palette[key]=colors[key]!;return palette;}
 function sharedAsset(scene:Scene,palette:CharacterPalette){
  let cache=assets.get(scene);if(!cache){const material=new StandardMaterial('minimal-character:vertex-color',scene);material.diffuseColor=Color3.White();material.specularColor=new Color3(.08,.08,.08);material.backFaceCulling=false;material.twoSidedLighting=true;cache={material,geometries:new Map()};assets.set(scene,cache);}
  const key=JSON.stringify(palette);let asset=cache.geometries.get(key);if(asset?.geometry.isDisposed())asset=undefined;
@@ -10,7 +11,7 @@ function sharedAsset(scene:Scene,palette:CharacterPalette){
  return {...asset,material:cache.material};
 }
 export function createSkinnedCharacter(scene:Scene,options:{name:string;firstPerson:boolean;colors?:Partial<CharacterPalette>}){
- const rig=createCharacterRig(scene,options.name),palette={...DEFAULT_PALETTE,...options.colors},asset=sharedAsset(scene,palette),skeleton=new Skeleton(options.name+':skin',options.name+':skin',scene),bones=new Map<string,Bone>();
+ const rig=createCharacterRig(scene,options.name),palette=resolvePalette(options.colors),asset=sharedAsset(scene,palette),skeleton=new Skeleton(options.name+':skin',options.name+':skin',scene),bones=new Map<string,Bone>();
  const nodes={...rig.joints,...rig.correctives};const nodeNames=new Map(Object.entries(nodes).map(([name,node])=>[node,name]));
  // Bind vertices are root-local. Meshes inherit the world root; the root bone MUST
  // stay identity to avoid applying player yaw/translation twice.
@@ -21,6 +22,12 @@ export function createSkinnedCharacter(scene:Scene,options:{name:string;firstPer
  skeleton.computeAbsoluteMatrices(true);
  const meshes=asset.ranges.map((range,i)=>{const mesh=new Mesh(options.name+':minimal-'+['body','arms','legs'][i],scene);asset.geometry.applyToMesh(mesh);mesh.subMeshes=[];new SubMesh(0,0,asset.geometry.getTotalVertices(),range.indexStart,range.indexCount,mesh);mesh.parent=rig.root;mesh.skeleton=skeleton;mesh.numBoneInfluencers=4;mesh.computeBonesUsingShaders=true;mesh.material=asset.material;mesh.isPickable=false;mesh.setBoundingInfo(new BoundingInfo(new Vector3(-1.3,-.3,-1.4),new Vector3(1.3,3,1.5)));return mesh;});
  if(options.firstPerson)meshes[0].setEnabled(false);
+ let paletteKey=JSON.stringify(palette);
+ function setColors(colors:Partial<CharacterPalette>){
+  const next=resolvePalette(colors),key=JSON.stringify(next);if(key===paletteKey)return;paletteKey=key;
+  const updated=sharedAsset(scene,next);
+  meshes.forEach((mesh,i)=>{updated.geometry.applyToMesh(mesh);mesh.releaseSubMeshes();const range=updated.ranges[i];new SubMesh(0,0,updated.geometry.getTotalVertices(),range.indexStart,range.indexCount,mesh);});
+ }
  function update(pose:CharacterPose){rig.update(pose);if(options.firstPerson)meshes[2].setEnabled(!pose.attacking);}
- return {...rig,meshes,skeleton,update};
+ return {...rig,meshes,skeleton,update,setColors};
 }

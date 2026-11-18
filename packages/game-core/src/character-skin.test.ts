@@ -3,8 +3,18 @@ import {NullEngine,Scene,Matrix,Vector3} from '@babylonjs/core';
 import {createSkinnedCharacter} from '../../../apps/web/game/createSkinnedCharacter.ts';
 import {createLegacyCharacter} from '../../../apps/web/game/createLegacyCharacter.ts';
 import {generateCharacterGeometry,BONE_NAMES} from '../../../apps/web/game/characterGeometry.ts';
+import {playerPalette} from '../../protocol/src/playerColor.ts';
 import {CHARACTER,DUMMY} from './court.ts';import {characterPose} from './motion.ts';import {createState,zeroInput,startCharge,releaseShot,stepGame,CFG} from './simulation.ts';
 function setup(){const engine=new NullEngine({renderWidth:128,renderHeight:128,textureSize:256,deterministicLockstep:false,lockstepMaxSteps:4});return {engine,scene:new Scene(engine)};}
+
+test('changing a player palette preserves the rig and other player colors and reuses cached geometry',()=>{
+ const {engine,scene}=setup();try{
+  const a=createSkinnedCharacter(scene,{name:'chosen-a',firstPerson:true,colors:playerPalette('blue')}),b=createSkinnedCharacter(scene,{name:'chosen-b',firstPerson:false,colors:playerPalette('orange')});
+  const blue=a.meshes[0].geometry,orange=b.meshes[0].geometry,material=a.meshes[0].material,skeleton=a.skeleton,socket=a.handSockets[0];assert.notEqual(blue,orange);assert.equal(material,b.meshes[0].material);
+  a.setColors(playerPalette('orange'));assert.equal(a.meshes[0].geometry,orange);assert.equal(b.meshes[0].geometry,orange);assert.equal(a.skeleton,skeleton);assert.equal(a.handSockets[0],socket);
+  a.setColors(playerPalette('blue'));assert.equal(a.meshes[0].geometry,blue);assert.equal(b.meshes[0].geometry,orange);assert.equal(a.meshes[0].isEnabled(),false);assert.equal(a.meshes[0].subMeshes.length,1);assert.equal(a.meshes[1].isEnabled(),true);
+ }finally{engine.dispose();}
+});
 test('generated skin has finite data, normalized bounded weights and shared armhole boundaries',()=>{
  const d=generateCharacterGeometry(),n=d.positions.length/3;assert.equal(d.colors.length,n*4);assert.equal(d.matricesWeights.length,n*4);assert.equal(d.matricesIndices.length,n*4);
  assert.ok(d.positions.every(Number.isFinite));assert.ok(d.indices.every(i=>i>=0&&i<n));
