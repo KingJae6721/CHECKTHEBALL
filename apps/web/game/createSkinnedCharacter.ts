@@ -1,6 +1,6 @@
 import {Bone,BoundingInfo,Color3,Geometry,Matrix,Mesh,Scene,Skeleton,StandardMaterial,SubMesh,Vector3,VertexData} from '@babylonjs/core';
 import {createCharacterRig} from './characterRig';
-import {BONE_NAMES,DEFAULT_PALETTE,generateCharacterGeometry,type CharacterPalette} from './characterGeometry';
+import {BONE_NAMES,SKIN_SHOULDER_X,DEFAULT_PALETTE,generateCharacterGeometry,type CharacterPalette} from './characterGeometry';
 import type {CharacterPose} from '../../../packages/game-core/src/motion';
 const assets=new WeakMap<Scene,{material:StandardMaterial;geometries:Map<string,{geometry:Geometry;ranges:{indexStart:number;indexCount:number}[]}>}>();
 function resolvePalette(colors?:Partial<CharacterPalette>):CharacterPalette{const palette={...DEFAULT_PALETTE};for(const key of Object.keys(palette) as (keyof CharacterPalette)[])if(colors?.[key]!==undefined)palette[key]=colors[key]!;return palette;}
@@ -11,7 +11,7 @@ function sharedAsset(scene:Scene,palette:CharacterPalette){
  return {...asset,material:cache.material};
 }
 export function createSkinnedCharacter(scene:Scene,options:{name:string;firstPerson:boolean;colors?:Partial<CharacterPalette>}){
- const rig=createCharacterRig(scene,options.name),palette=resolvePalette(options.colors),asset=sharedAsset(scene,palette),skeleton=new Skeleton(options.name+':skin',options.name+':skin',scene),bones=new Map<string,Bone>();
+ const rig=createCharacterRig(scene,options.name,{shoulderX:SKIN_SHOULDER_X}),palette=resolvePalette(options.colors),asset=sharedAsset(scene,palette),skeleton=new Skeleton(options.name+':skin',options.name+':skin',scene),bones=new Map<string,Bone>();
  const nodes={...rig.joints,...rig.correctives};const nodeNames=new Map(Object.entries(nodes).map(([name,node])=>[node,name]));
  // Bind vertices are root-local. Meshes inherit the world root; the root bone MUST
  // stay identity to avoid applying player yaw/translation twice.

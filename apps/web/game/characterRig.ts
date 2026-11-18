@@ -2,13 +2,14 @@ import {Quaternion,Scene,TransformNode,Vector3} from '@babylonjs/core';
 import {CHARACTER,DUMMY,GAIT} from '../../../packages/game-core/src/court';
 import type {CharacterPose} from '../../../packages/game-core/src/motion';
 // The sole display coordinate/rotation adapter. Never feeds gameplay state.
-export function createCharacterRig(scene:Scene,prefix:string){
+export function createCharacterRig(scene:Scene,prefix:string,display:{shoulderX?:number}={}){
+ const shoulderX=display.shoulderX??CHARACTER.shoulderX;
  const root=new TransformNode(prefix+':root',scene),joints:Record<string,TransformNode>={root},correctives:Record<string,TransformNode>={};
  const joint=(name:string,parent:TransformNode,x=0,y=0,z=0)=>{const n=new TransformNode(prefix+':'+name,scene);n.parent=parent;n.position.set(x,y,z);joints[name]=n;return n;};
  const pelvis=joint('pelvis',root,0,CHARACTER.pelvisY),torso=joint('torso',pelvis,0,DUMMY.torsoY-CHARACTER.pelvisY),neck=joint('neck',torso,0,DUMMY.neckY-DUMMY.torsoY);joint('head',neck,0,DUMMY.headY-DUMMY.neckY);
  const arms:{side:number;shoulder:TransformNode;elbow:TransformNode;wrist:TransformNode;socket:TransformNode}[]=[],legs:TransformNode[]=[];
  const bend=(name:string,parent:TransformNode,y:number)=>{const n=new TransformNode(prefix+':'+name,scene);n.parent=parent;n.position.y=y;n.rotationQuaternion=Quaternion.Identity();correctives[name]=n;};
- for(const side of [-1,1]){const name=side===1?'right':'left',shoulder=joint(name+'Shoulder',torso,side*CHARACTER.shoulderX,CHARACTER.shoulderY-DUMMY.torsoY),elbow=joint(name+'Elbow',shoulder,0,-CHARACTER.upperArm),wrist=joint(name+'Wrist',elbow,0,-CHARACTER.forearm);
+ for(const side of [-1,1]){const name=side===1?'right':'left',shoulder=joint(name+'Shoulder',torso,side*shoulderX,CHARACTER.shoulderY-DUMMY.torsoY),elbow=joint(name+'Elbow',shoulder,0,-CHARACTER.upperArm),wrist=joint(name+'Wrist',elbow,0,-CHARACTER.forearm);
   const socket=new TransformNode(prefix+':'+name+'HandSocket',scene);socket.parent=wrist;socket.position.y=-CHARACTER.handLength/2;arms.push({side,shoulder,elbow,wrist,socket});
   const hip=joint(name+'Hip',pelvis,side*DUMMY.legX);legs.push(hip);const knee=joint(name+'Knee',hip,0,-CHARACTER.upperLeg);joint(name+'Ankle',knee,0,-CHARACTER.lowerLeg);
   bend(name+'ElbowBend',shoulder,-CHARACTER.upperArm);bend(name+'KneeBend',hip,-CHARACTER.upperLeg);
@@ -37,7 +38,7 @@ export function createCharacterRig(scene:Scene,prefix:string){
     origin.x+=Math.cos(pose.yaw)*pose.torsoSide;origin.z-=Math.sin(pose.yaw)*pose.torsoSide;
     const toLocal=(p:{x:number;y:number;z:number})=>{const x=p.x-origin.x,y=p.y-origin.y,z=p.z-origin.z;return new Vector3(x*Math.cos(pose.yaw)-z*Math.sin(pose.yaw),y,x*Math.sin(pose.yaw)+z*Math.cos(pose.yaw));};
     for(const arm of arms) {
-      const palm=toLocal(arm.side===1?pose.rightHand:pose.leftHand),s=new Vector3(arm.side*CHARACTER.shoulderX,CHARACTER.shoulderY,0);
+      const palm=toLocal(arm.side===1?pose.rightHand:pose.leftHand),s=new Vector3(arm.side*shoulderX,CHARACTER.shoulderY,0);
       const flex=arm.side===1?pose.rightWrist:pose.leftWrist;
       const handAxis=palm.subtract(s);
       if(arm.side===1&&pose.shooting>0){

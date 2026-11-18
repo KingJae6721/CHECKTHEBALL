@@ -50,6 +50,17 @@ export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,
  line('board-border',[boardPoint(-COURT.board.width/2,-COURT.board.height/2),boardPoint(-COURT.board.width/2,COURT.board.height/2),boardPoint(COURT.board.width/2,COURT.board.height/2),boardPoint(COURT.board.width/2,-COURT.board.height/2),boardPoint(-COURT.board.width/2,-COURT.board.height/2)],metal);
  line('board-square',[boardPoint(-.3,-.45),boardPoint(-.3,0),boardPoint(.3,0),boardPoint(.3,-.45)],gym.markings);
  const rim=MeshBuilder.CreateTorus('rim',{diameter:CFG.rimRadius*2,thickness:COURT.rimTubeRadius*2,tessellation:COURT.rimSegments},scene);rim.position.copyFromFloats(CFG.rim.x,CFG.rim.y,CFG.rim.z);rim.material=orange;
+ // Visual mount bridges the measured board face / rear rim gap; colliders stay unchanged.
+ const boardFront=COURT.board.center.z-COURT.board.depth/2;
+ const rimRear=COURT.rim.z+COURT.rimRadius;
+ const mount=MeshBuilder.CreateBox('rim-mount-plate',{width:.22,height:.19,depth:.025},scene);
+ mount.position.set(COURT.rim.x,COURT.rim.y+.035,boardFront-.0125);mount.material=orange;
+ const bracket=MeshBuilder.CreateBox('rim-mount-neck',{width:.13,height:.055,depth:boardFront-rimRear+.025},scene);
+ bracket.position.set(COURT.rim.x,COURT.rim.y,(boardFront+rimRear)/2);bracket.material=orange;
+ for(const side of [-1,1]){
+  line('rim-mount-brace',[new Vector3(COURT.rim.x+side*.075,COURT.rim.y-.045,boardFront-.025),new Vector3(COURT.rim.x+side*.065,COURT.rim.y-.01,rimRear-.012)],metal,.012);
+  line('backboard-rear-brace',[new Vector3(side*.65,COURT.board.center.y-.34,COURT.board.center.z+.06),new Vector3(0,3.8,6.9)],metal,.025);
+ }
  const net=createNet(scene,white);
  const ball=MeshBuilder.CreateSphere('ball',{diameter:CFG.ballRadius*2,segments:20},scene);ball.material=ballmat;
  for(const rot of[0,Math.PI/2]){const seam=MeshBuilder.CreateTorus('seam',{diameter:.239,thickness:.006,tessellation:40},scene);seam.parent=ball;seam.rotation.x=rot;seam.material=dark;}
