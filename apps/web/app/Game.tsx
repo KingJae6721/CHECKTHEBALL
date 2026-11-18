@@ -3,6 +3,8 @@ import {useEffect,useRef,useState} from 'react';
 import OnlineMenu,{type OnlinePage} from './OnlineMenu';
 import type {RoomCreation} from '../../../packages/protocol/src/rooms';
 import RoomChat from './RoomChat';
+import OnlineScoreboard from './OnlineScoreboard';
+import ScoreBurst from './ScoreBurst';
 import MatchPanel from './MatchPanel';import GameHud from './GameHud';import RoomInvite from './RoomInvite';import {Settings,Help,Credits} from './MenuPanels';
 import type {OnlineSession} from '../game/onlineClient';import type {Snapshot,createGame} from '../game/createGame';
 import {BackgroundMusic} from '../game/backgroundMusic';
@@ -81,7 +83,9 @@ export default function Game(){
    {playing&&state.online&&<span className={`network-ping ${pingQuality}`} title={state.online.pingStatus} aria-label={ping==null?state.online.pingStatus:`핑 ${ping}ms`}>{ping??'--'}<small>ms</small></span>}
    <button className="menu-utility" onClick={()=>openPanel('SETTINGS')}>설정</button><button className="menu-utility" onClick={()=>openPanel('HELP')}>조작 안내</button>
   </div></header>
+  {playing&&state.online&&panel==='MAIN'&&<OnlineScoreboard key={state.online.roomId+':'+(state.online.match?.id??0)} players={state.online.players} selfId={state.online.selfId} ownerId={state.online.ownerId}/>}
   {playing&&(state.locked||chatOpen)&&panel==='MAIN'&&<GameHud state={state} onReset={()=>runtime.current?.reset()}/>}
+  {playing&&<ScoreBurst state={state}/>}
   {showCard&&<div className="menu-layer"><section className="menu-card" aria-label={panel==='SETTINGS'?'설정':panel==='HELP'?'조작 안내':panel==='CREDITS'?'크레딧':'시작 메뉴'}>
    {panel==='SETTINGS'?<Settings onMusic={()=>void music.current?.activate()} audio={audio} camera={camera} onAudio={changeAudio} onCamera={changeCamera} onBack={()=>setPanel('MAIN')}/>:
     panel==='HELP'?<Help online={!!session} onBack={()=>setPanel('MAIN')}/>:
