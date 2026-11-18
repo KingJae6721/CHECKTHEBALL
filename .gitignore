@@ -5,6 +5,7 @@ out/
 *.tsbuildinfo
 apps/game-server/dist/
 apps/web/.env.local
+apps/game-server/.env.local
 
 # Third-party recordings: playable end-product assets, excluded from source distribution.
 /sounds/basketball-ball-drible-2093.wav

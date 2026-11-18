@@ -1,4 +1,9 @@
 import {makeServer} from './server';
+import {existsSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+// Node's native loader preserves environment variables already set by the host.
+const localEnv=fileURLToPath(new URL('../.env.local',import.meta.url));
+if(existsSync(localEnv))process.loadEnvFile(localEnv);
 const port=Number(process.env.GAME_SERVER_PORT??2567),host=process.env.GAME_SERVER_HOST??'127.0.0.1';
 const server=makeServer();
 try{await server.listen(port,host);}catch(error){

@@ -24,7 +24,7 @@ export default function MatchPanel({match:m,roomCode,players,selfId,remainingMs,
    {onSettings&&<button className="match-leave" onClick={onSettings}>설정</button>}
    {onHelp&&<button className="match-leave" onClick={onHelp}>조작 안내</button>}
    {error&&<p role="alert">{error}</p>}
-   <button className="match-leave" onClick={onLeave}>첫 화면으로 나가기</button>
+   <button className="match-leave" onClick={onLeave}>방 목록으로 나가기</button>
   </section></div>}
  </>;
 }
