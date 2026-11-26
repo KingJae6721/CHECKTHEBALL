@@ -1,4 +1,7 @@
 'use client';
+import TeamMatchPanel,{TeamScoreboard} from './TeamMatchPanel';
+import TeamPanel from './TeamPanel';
+import type {TeamId} from '../../../packages/game-core/src/teams';
 import {DEFAULT_PLAYER_COLOR,PLAYER_COLOR_KEY,playerColor,type PlayerColor} from '../../../packages/protocol/src/playerColor';
 import {useEffect,useRef,useState} from 'react';
 import OnlineMenu,{type OnlinePage} from './OnlineMenu';
@@ -18,6 +21,7 @@ const initial:Snapshot={defense:createDefense(),practice:createPractice(),passCh
 function storage():Store|undefined{try{return window.localStorage;}catch{return undefined;}}
 export default function Game(){
  const canvas=useRef<HTMLCanvasElement>(null),runtime=useRef<ReturnType<typeof createGame>|null>(null),factory=useRef<typeof createGame|null>(null),sessionRef=useRef<OnlineSession|undefined>(undefined),gate=useRef(new ConnectionAttempt()),generation=useRef(0);
+ const [preferredTeam,setPreferredTeam]=useState<TeamId|undefined>();
  const [onlinePage,setOnlinePage]=useState<OnlinePage>('MENU'),[listRefresh,setListRefresh]=useState(0);
  const [chatOpen,setChatOpen]=useState(false);
  const [screen,setScreen]=useState<MenuScreen>('HOME'),[panel,setPanel]=useState<'MAIN'|'SETTINGS'|'HELP'|'CREDITS'>('MAIN');
@@ -66,7 +70,7 @@ export default function Game(){
  async function join(create:boolean,target=roomId,settings?:RoomCreation){
   if(!saveName())return;void music.current?.activate();if(!create){const invalid=roomIdError(target);if(invalid){setError(invalid);return;}}
   const token=gate.current.begin();if(token===null)return;setError('');setScreen('CONNECTING');
-  try{const {connectOnline}=await import('../game/onlineClient');if(!gate.current.current(token))return;const connected=await connectOnline(create?undefined:target.trim(),validateNickname(nickname).name,settings?.mode??roomMode,settings,prefs.current.color);
+  try{const {connectOnline}=await import('../game/onlineClient');if(!gate.current.current(token))return;const connected=await connectOnline(create?undefined:target.trim(),validateNickname(nickname).name,settings?.mode??roomMode,settings,prefs.current.color,preferredTeam);
    if(!gate.current.accept(token,connected))return;
    if(!factory.current){connected.close();setScreen('FRIENDS');setError('코트를 준비 중입니다. 다시 눌러주세요.');return;}
    sessionRef.current=connected;setSession(connected);setRoomId(connected.room.roomId);
@@ -84,9 +88,11 @@ export default function Game(){
   <div className="vignette"/>
   <header className="topbar"><button className="brand brand-button" onClick={home} aria-label="CheckTheBall 첫 화면">◉ CheckTheBall<span className="brand-slash">/</span></button><div className="top-right">
    {playing&&state.online&&<span className={`network-ping ${pingQuality}`} title={state.online.pingStatus} aria-label={ping==null?state.online.pingStatus:`핑 ${ping}ms`}>{ping??'--'}<small>ms</small></span>}
+   {playing&&(state.online?.mode==='practice2v2'||state.online?.mode==='teamDuel')&&!chatOpen&&<button className="menu-utility" onClick={()=>{setPanel('MAIN');runtime.current?.pause('TEAM_PANEL');}}>내 팀 {state.online.players.find(p=>p.id===state.online?.selfId)?.teamId??'-'} · 팀 선택</button>}
    <button className="menu-utility" onClick={()=>openPanel('SETTINGS')}>설정</button><button className="menu-utility" onClick={()=>openPanel('HELP')}>조작 안내</button>
   </div></header>
-  {playing&&state.online&&panel==='MAIN'&&<OnlineScoreboard key={state.online.roomId+':'+(state.online.match?.id??0)} players={state.online.players} selfId={state.online.selfId} ownerId={state.online.ownerId}/>}
+  {playing&&state.online?.mode!=='practice2v2'&&state.online?.mode!=='teamDuel'&&state.online&&panel==='MAIN'&&<OnlineScoreboard key={state.online.roomId+':'+(state.online.match?.id??0)} players={state.online.players} selfId={state.online.selfId} ownerId={state.online.ownerId}/>}
+  {playing&&state.online?.mode==='practice2v2'&&session&&panel==='MAIN'&&<TeamPanel state={state.online} session={session} compact/>}
   {playing&&(state.locked||chatOpen)&&panel==='MAIN'&&<GameHud state={state} onReset={()=>runtime.current?.reset()}/>}
   {playing&&<ScoreBurst state={state} color={color}/>}
   {showCard&&<div className="menu-layer"><section className="menu-card" aria-label={panel==='SETTINGS'?'설정':panel==='HELP'?'조작 안내':panel==='CREDITS'?'크레딧':'시작 메뉴'}>
@@ -98,15 +104,17 @@ export default function Game(){
      <small id="nickname-note">1~20자 · 표시 이름이며 로그인 없이 플레이합니다.</small><p id="nickname-error" className="menu-error" role={nicknameError?'alert':undefined}>{nicknameError}</p>
      <button className="menu-primary" disabled={!profileReady} onClick={()=>navigate('FRIENDS')}>온라인 플레이</button><button className="menu-secondary" disabled={!profileReady} onClick={()=>navigate('PRACTICE_SELECT')}>혼자 연습</button><button className="menu-text" onClick={()=>setPanel('CREDITS')}>크레딧</button>
     </>:
-    screen==='FRIENDS'||connecting?<OnlineMenu page={onlinePage} onPage={page=>{setError('');setOnlinePage(page);}} nickname={nickname} roomId={roomId} onRoomId={setRoomId} mode={roomMode} onMode={setRoomMode} connecting={connecting} ready={factoryReady} refreshKey={listRefresh} onCreate={settings=>void join(true,undefined,settings)} onJoin={id=>void join(false,id)} onBack={back}/>:
+    screen==='FRIENDS'||connecting?<OnlineMenu page={onlinePage} onPage={page=>{setError('');setOnlinePage(page);}} nickname={nickname} roomId={roomId} onRoomId={setRoomId} mode={roomMode} onMode={setRoomMode} preferredTeam={preferredTeam} onTeam={setPreferredTeam} connecting={connecting} ready={factoryReady} refreshKey={listRefresh} onCreate={settings=>void join(true,undefined,settings)} onJoin={id=>void join(false,id)} onBack={back}/>:
     screen==='PRACTICE_SELECT'?<><h2 tabIndex={-1} data-menu-title>혼자 연습</h2>{chooser}<button className="menu-primary" disabled={!factoryReady} onClick={()=>launch(undefined,true)}>{factoryReady?'연습 시작':'코트 준비 중…'}</button><button className="menu-text" onClick={back}>뒤로</button></>:
-    <><h2 tabIndex={-1} data-menu-title>{hasPlayed?'플레이 메뉴':'코트 준비 완료'}</h2>{session?<><RoomInvite code={session.room.roomId}/><p>{state.online?.connected===false?'연결이 끊겼습니다.':(state.online?.count??0)<2?'친구가 참가하기를 기다립니다.':'친구가 참가했습니다.'}</p><p>온라인에서는 메뉴를 열어도 경기가 계속됩니다.</p></>:chooser}
+    <><h2 tabIndex={-1} data-menu-title>{hasPlayed?'플레이 메뉴':'코트 준비 완료'}</h2>{session?<><RoomInvite code={session.room.roomId}/>{state.online?.mode==='practice2v2'&&<TeamPanel state={state.online} session={session}/>}<p>{state.online?.connected===false?'연결이 끊겼습니다.':(state.online?.count??0)<2?'친구가 참가하기를 기다립니다.':'친구가 참가했습니다.'}</p><p>온라인에서는 메뉴를 열어도 경기가 계속됩니다.</p></>:chooser}
      <button className="menu-primary" disabled={!sceneReady||!!session&&!session.connected} onClick={enter}>{hasPlayed?'계속하기':'코트에서 플레이'}</button>{!session&&<button className="menu-secondary" onClick={()=>runtime.current?.reset()}>현재 연습 재시도</button>}
      <button className="menu-secondary" onClick={()=>setPanel('SETTINGS')}>설정</button><button className="menu-text" onClick={()=>setPanel('HELP')}>조작 안내</button><button className="menu-text" onClick={session?leaveOnline:home}>{session?'방 목록으로 나가기':'첫 화면으로 나가기'}</button>
     </>}
    {error&&<p className="menu-error" role="alert">{error}</p>}<p className="desktop-note">데스크톱 키보드와 마우스로 플레이해주세요. 모바일 조작은 지원하지 않습니다.</p>
   </section></div>}
-  {playing&&state.online?.match&&!chatOpen&&panel==='MAIN'&&<MatchPanel error={error} roomCode={state.online.roomId} match={state.online.match} players={state.online.players} selfId={state.online.selfId} remainingMs={state.online.remainingMs??0} locked={state.locked} connected={state.online.connected} onIntent={intent=>session?.matchIntent(intent)} onEnter={enter} onLeave={leaveOnline} onSettings={()=>openPanel('SETTINGS')} onHelp={()=>openPanel('HELP')}/>}
+  {playing&&state.online?.match&&!state.online.match.teams&&!chatOpen&&panel==='MAIN'&&<MatchPanel error={error} roomCode={state.online.roomId} match={state.online.match} players={state.online.players} selfId={state.online.selfId} remainingMs={state.online.remainingMs??0} locked={state.locked} connected={state.online.connected} onIntent={intent=>session?.matchIntent(intent)} onEnter={enter} onLeave={leaveOnline} onSettings={()=>openPanel('SETTINGS')} onHelp={()=>openPanel('HELP')}/>}
+  {playing&&state.online?.match?.teams&&session&&!chatOpen&&panel==='MAIN'&&<TeamMatchPanel state={state.online} session={session} locked={state.locked} onEnter={enter} onLeave={leaveOnline} onSettings={()=>openPanel('SETTINGS')} onHelp={()=>openPanel('HELP')}/>}
+  {playing&&state.online?.match?.teams&&panel==='MAIN'&&<TeamScoreboard state={state.online}/>}
   {playing&&session&&panel==='MAIN'&&<RoomChat key={session.room.sessionId} session={session} onBegin={()=>runtime.current?.pause('CHAT')} onOpenChange={setChatOpen} onClose={()=>{if(session.canPlay)enter();}}/>}
   {playing&&state.audioFailed&&!audio.muted&&audio.volume>0&&<button className="audio-recovery" onClick={()=>runtime.current?.unlockAudio()}>소리가 켜지지 않았습니다 · 눌러서 다시 켜기</button>}
  </main>;

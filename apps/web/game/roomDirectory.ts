@@ -9,7 +9,7 @@ export async function fetchPublicRooms(signal:AbortSignal):Promise<PublicRoom[]>
  const payload=await response.json();
  if(!Array.isArray(payload?.rooms)||payload.rooms.length>ROOM_DIRECTORY.maxResults)throw Error('방 목록 응답을 확인할 수 없습니다.');
  return payload.rooms.map((r:PublicRoom)=>{
-  if(!r||typeof r.roomId!=='string'||typeof r.roomName!=='string'||Array.from(r.roomName).length>ROOM_DIRECTORY.maxName||!['duel','practice'].includes(r.mode)||r.status!=='WAITING'||!Number.isSafeInteger(r.players)||!Number.isSafeInteger(r.maxPlayers)||r.players<1||r.players>=r.maxPlayers)throw Error('방 목록 응답을 확인할 수 없습니다.');
+  if(!r||typeof r.roomId!=='string'||typeof r.roomName!=='string'||Array.from(r.roomName).length>ROOM_DIRECTORY.maxName||!['duel','practice','practice2v2','teamDuel'].includes(r.mode)||r.status!=='WAITING'||!Number.isSafeInteger(r.players)||!Number.isSafeInteger(r.maxPlayers)||r.players<1||r.players>=r.maxPlayers)throw Error('방 목록 응답을 확인할 수 없습니다.');
   return {roomId:r.roomId,roomName:r.roomName,mode:r.mode,players:r.players,maxPlayers:r.maxPlayers,status:r.status};
  });
 }

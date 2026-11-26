@@ -16,7 +16,8 @@ export default function ScoreBurst({state,color=DEFAULT_PLAYER_COLOR}:{state:Sna
   if(document.hidden||skipNext.current){skipNext.current=false;return;}
   const container=layer.current;if(!container)return;
   for(const gain of scoreGains(old.players,players)){
-   const target=state.online?[...document.querySelectorAll<HTMLElement>('.online-scoreboard [data-player-id]')].find(side=>side.dataset.playerId===gain.id)?.querySelector('.player-score'):document.querySelector('.session .score strong');
+   const scorerTeam=state.online?.players.find(p=>p.id===gain.id)?.teamId;
+   const target=state.online?.match?.teams&&scorerTeam?document.querySelector(`[data-team-id="${scorerTeam}"] .player-score`):state.online?[...document.querySelectorAll<HTMLElement>('.online-scoreboard [data-player-id]')].find(side=>side.dataset.playerId===gain.id)?.querySelector('.player-score'):document.querySelector('.session .score strong');
    if(!target)continue;
    const bounds=target.getBoundingClientRect(),area=container.getBoundingClientRect();if(!bounds.width||!bounds.height)continue;
    const dx=bounds.left+bounds.width/2-(area.left+area.width/2),dy=bounds.top+bounds.height/2-(area.top+area.height/2);

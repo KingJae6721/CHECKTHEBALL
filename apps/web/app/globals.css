@@ -32,3 +32,10 @@
 .shot-distance{margin-bottom:8px;font-size:11px;letter-spacing:1px;color:#c4d0c8}
 
 .character-colors{border:1px solid #81968b55;margin-top:14px;padding:14px}.character-colors legend{font-size:12px}.menu-card .character-colors p{font-size:11px;margin-top:0}.character-colors>div{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.menu-card .character-colors button{display:flex;align-items:center;justify-content:center;gap:6px;margin:0;padding:9px 5px;background:#12272d;border:1px solid #81968b66;color:#eaf2e4;font-size:12px}.menu-card .character-colors button[aria-pressed=true]{border-color:#e6eccf;background:#324846}.character-colors i{display:inline-block;width:14px;height:14px;border-radius:50%;border:1px solid #ffffff70}.score-side.self,.score-side.opponent{border-top-color:var(--player-color)}.score-side .player-score{color:var(--player-color)}.player-color-dot{width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:var(--player-color)}
+
+/* Four-player practice: individual records only, no team match score. */
+.team-columns{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;min-width:0}
+.team-column{border-top:3px solid;padding:10px;min-width:0;background:#0b2028bd;border-radius:8px}
+.team-column ul{list-style:none;padding:0;margin:8px 0}.team-column li{display:flex;justify-content:space-between;gap:10px;padding:4px 0;min-width:0;font-size:13px}.team-column li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.team-column .player-score{font-size:15px}.team-empty{opacity:.4}.team-panel h3{font-size:16px}.team-panel small{display:block;line-height:1.5;margin-top:10px}
+.team-hud.online-scoreboard{width:min(460px,60vw);display:block;pointer-events:none}.team-hud .team-column{padding:6px 10px}.team-hud .team-column>strong{font-size:12px}.team-hud .team-column ul{margin:3px 0}.team-hud .team-column li{padding:2px 0;font-size:12px}
+@media(max-width:600px){.team-hud.online-scoreboard{top:80px;width:90vw}.team-columns{gap:6px}.team-column{padding:6px}.team-panel .menu-secondary{padding:8px;font-size:12px}}

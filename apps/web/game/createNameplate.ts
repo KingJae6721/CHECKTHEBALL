@@ -24,7 +24,7 @@ export function createNameplate(scene:Scene,root:TransformNode,name:string,occlu
   const pixelWidth=NAMEPLATE.width*cssHeight/(2*Math.max(.01,depth)*Math.tan(camera.fov/2));const scale=Math.min(1,NAMEPLATE.maxPixels/Math.max(1,pixelWidth));mesh.scaling.setAll(scale);
   mesh.setEnabled(!blocked);
  }
- function dispose(){if(disposed)return;disposed=true;mesh.dispose();material.dispose();texture.dispose();}
- scene.onDisposeObservable.addOnce(dispose);
+ function dispose(){if(disposed)return;disposed=true;scene.onDisposeObservable.remove(disposeObserver);mesh.dispose();material.dispose();texture.dispose();}
+ const disposeObserver=scene.onDisposeObservable.addOnce(dispose);
  return {mesh,update,dispose};
 }
