@@ -1,4 +1,5 @@
 'use client';
+import SlidingLobbyMenu from './SlidingLobbyMenu';
 import PlayerLobby,{LobbyBackdrop,type LobbyAction} from './PlayerLobby';
 import './playerLobby.css';
 import TeamMatchPanel,{TeamScoreboard} from './TeamMatchPanel';
@@ -84,11 +85,15 @@ export default function Game(){
  }
  async function nextQuick(){const left=home(),token=gate.current.begin();if(token===null)return;await left;if(!gate.current.current(token))return;gate.current.finish(token);setRoomMode('teamDuel');await join(false,undefined,undefined,true);}
  function back(){const next=connecting?(quickSearching?'HOME':'FRIENDS'):'HOME';setQuickSearching(false);gate.current.cancel();setError('');if(next==='HOME')setRoomMode(mode=>mode==='teamDuel'||mode==='practice2v2'?'teamDuel':'duel');setScreen(next);setPanel('MAIN');}
+ function menuBack(){if(panel!=='MAIN'){setPanel('MAIN');return;}back();}
  function chooseScenario(next:PracticeMode){setScenario(next);if(playing&&!session)runtime.current?.scenario(next);}
  const ping=state.online?.pingMs,pingQuality=ping==null?'unknown':ping<=100?'good':ping<=200?'fair':'poor';
  const showCard=!chatOpen&&(!playing||!state.locked&&(!state.online?.match||panel!=='MAIN'));
+ const showMenuBack=!chatOpen&&(panel!=='MAIN'||!playing&&screen!=='HOME');
+ const menuPage=panel!=='MAIN'?panel:screen==='FRIENDS'||connecting?`ONLINE_${onlinePage}`:screen;
+ const menuDepth=panel!=='MAIN'?3:screen==='HOME'?0:1;
  const chooser=<fieldset className="scenario-choices"><legend>연습 선택</legend>{Object.entries(scenarios).map(([id,item])=><label key={id}><input type="radio" name="scenario" value={id} checked={scenario===id} onChange={()=>chooseScenario(id as PracticeMode)}/><span><strong>{item.name}</strong><small>{item.description}</small></span></label>)}</fieldset>;
- return <main className={`game ${!playing||!state.locked?'menu-shell':''} ${!playing?'player-lobby-shell':''}`} onKeyDownCapture={e=>{if(e.code!=='Escape'&&(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement)&&!(e.target as HTMLElement).closest('.room-chat'))e.stopPropagation();}}>
+ return <main className={`game ${!playing||!state.locked?'menu-shell':''} ${!playing?'player-lobby-shell':''} ${showMenuBack?'has-menu-back':''}`} onKeyDownCapture={e=>{if(e.code!=='Escape'&&(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement)&&!(e.target as HTMLElement).closest('.room-chat'))e.stopPropagation();}}>
   <canvas ref={canvas} hidden={!playing} aria-label="농구 코트"/>
   {!playing&&<LobbyBackdrop color={color} nickname={nickname}/>}
   <div className="vignette"/>
@@ -102,7 +107,8 @@ export default function Game(){
   {playing&&state.online?.mode==='practice2v2'&&session&&panel==='MAIN'&&<TeamPanel state={state.online} session={session} compact/>}
   {playing&&(state.locked||chatOpen)&&panel==='MAIN'&&<GameHud state={state} onReset={()=>runtime.current?.reset()}/>}
   {playing&&<ScoreBurst state={state} color={color}/>}
-  {showCard&&<div className="menu-layer"><section className={`menu-card ${!playing?'lobby-menu-panel':''}`}  aria-label={panel==='SETTINGS'?'설정':panel==='HELP'?'조작 안내':panel==='CREDITS'?'크레딧':'시작 메뉴'}>
+  {showMenuBack&&<div className="menu-back-bar"><button type="button" className="menu-back-prominent" onClick={menuBack} aria-label={connecting?'연결 취소하고 뒤로가기':'이전 메뉴로 뒤로가기'}><svg viewBox="0 0 48 48" aria-hidden="true" fill="none"><path d="M27 10 13 24l14 14M14 24h25"/></svg></button></div>}
+  {showCard&&<div className="menu-layer"><SlidingLobbyMenu enabled={!playing} page={menuPage} depth={menuDepth}><section className={`menu-card ${!playing?'lobby-menu-panel':''}`}  aria-label={panel==='SETTINGS'?'설정':panel==='HELP'?'조작 안내':panel==='CREDITS'?'크레딧':'시작 메뉴'}>
    {panel==='SETTINGS'?<Settings color={color} onColor={changeColor} onMusic={()=>void music.current?.activate()} audio={audio} camera={camera} onAudio={changeAudio} onCamera={changeCamera} onBack={()=>setPanel('MAIN')}/>:
     panel==='HELP'?<Help online={!!session} onBack={()=>setPanel('MAIN')}/>:
     panel==='CREDITS'?<Credits onBack={()=>setPanel('MAIN')}/>:
@@ -114,7 +120,7 @@ export default function Game(){
      <button className="menu-secondary" onClick={()=>setPanel('SETTINGS')}>설정</button><button className="menu-text" onClick={()=>setPanel('HELP')}>조작 안내</button><button className="menu-text" onClick={session?leaveOnline:home}>{session?'방 목록으로 나가기':'첫 화면으로 나가기'}</button>
     </>}
    {error&&<p className="menu-error" role="alert">{error}</p>}<p className="desktop-note">데스크톱 키보드와 마우스로 플레이해주세요. 모바일 조작은 지원하지 않습니다.</p>
-  </section></div>}
+  </section></SlidingLobbyMenu></div>}
   {playing&&state.online?.match&&!state.online.match.teams&&!chatOpen&&panel==='MAIN'&&<MatchPanel error={error} roomCode={state.online.roomId} match={state.online.match} players={state.online.players} selfId={state.online.selfId} remainingMs={state.online.remainingMs??0} locked={state.locked} connected={state.online.connected} onIntent={intent=>session?.matchIntent(intent)} onEnter={enter} onLeave={leaveOnline} onSettings={()=>openPanel('SETTINGS')} onHelp={()=>openPanel('HELP')}/>}
   {playing&&state.online?.match?.teams&&session&&!chatOpen&&panel==='MAIN'&&<TeamMatchPanel state={state.online} session={session} locked={state.locked} onEnter={enter} onQuick={()=>void nextQuick()} onLeave={leaveOnline} onSettings={()=>openPanel('SETTINGS')} onHelp={()=>openPanel('HELP')}/>}
   {playing&&state.online?.match?.teams&&panel==='MAIN'&&<TeamScoreboard state={state.online}/>}

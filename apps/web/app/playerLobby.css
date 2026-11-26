@@ -14,3 +14,20 @@
 @media(max-width:760px){.game.player-lobby-shell{--lobby-header:82px;overflow:visible;height:auto;min-height:100dvh}.player-lobby-shell .topbar{height:var(--lobby-header);position:sticky;top:0;align-items:center;padding:12px 16px;gap:8px}.player-lobby-shell .brand-button{font-size:23px;letter-spacing:-1px}.player-lobby-shell .brand-slash{display:none}.player-lobby-shell .top-right{gap:6px}.player-lobby-shell .menu-utility{font-size:11px;padding:7px}.lobby-profile{width:92px;grid-template-columns:92px;padding:0;border:0;margin:0}.lobby-profile input{width:90px;font-size:14px}.lobby-profile label{font-size:9px}.player-lobby-shell .menu-layer{position:relative;inset:auto;width:100%;min-width:0;max-width:none;overflow:visible;display:block;padding:0 0 270px;background:#0b3231}.player-lobby-shell .lobby-menu-panel{height:auto;max-height:none;overflow:visible;padding:24px max(22px,6vw);background:none;box-shadow:none}.player-lobby-shell .player-lobby-menu h1{font-size:32px}.player-lobby-shell .lobby-intro{margin-bottom:20px}.lobby-stage{position:absolute;inset:auto 0 0;height:260px;z-index:15;pointer-events:none}.lobby-stage-shade{background:linear-gradient(#0b3231,transparent 55%,#0b323155)}.lobby-stage-heading{display:none}.lobby-player{inset:0 8% 0 40%}.lobby-player-caption{left:7%;bottom:14%;max-width:40%}.lobby-player-caption strong{font-size:23px}.lobby-player-caption span{font-size:9px}.lobby-profile #nickname-error:not(:empty){min-width:190px}.player-lobby-shell .lobby-actions button{font-size:20px;min-height:54px}.lobby-menu-footer{margin-top:20px}}
 @media(max-width:420px){.player-lobby-shell .topbar{padding:9px 12px;flex-wrap:wrap;--lobby-header:100px}.game.player-lobby-shell{--lobby-header:100px}.player-lobby-shell .brand-button{font-size:25px}.player-lobby-shell .top-right{width:100%;justify-content:space-between}.lobby-profile{display:flex;width:auto;gap:8px;align-items:center}.lobby-profile input{width:110px}.lobby-profile label{font-size:10px}.player-lobby-shell .menu-utility{padding:5px 8px}.player-lobby-shell .lobby-menu-panel{padding-top:20px}}
 @media(prefers-reduced-motion:reduce){.lobby-actions button{transition:none}}
+
+/* Fixed arrow only: the transparent hit area remains keyboard accessible. */
+.menu-back-bar{position:fixed;left:22px;top:110px;width:64px;height:64px;z-index:25}
+.menu-back-prominent{display:grid;place-items:center;width:64px;height:64px;padding:4px;border:0;border-radius:0;background:transparent;color:#f6f1df;box-shadow:none;cursor:pointer}
+.menu-back-prominent svg{width:52px;height:52px;stroke:currentColor;stroke-width:5.5;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 2px 3px #062d2b60)}
+.menu-back-prominent:hover{color:#fbb067;background:transparent}.menu-back-prominent:focus-visible{outline:2px solid #d9f45b;outline-offset:3px}
+.player-lobby-shell .menu-back-bar{left:clamp(20px,2.5vw,40px);top:calc(var(--lobby-header) + 10px)}
+.player-lobby-shell.has-menu-back .lobby-menu-panel{padding-top:94px}
+@media(max-width:760px){.menu-back-bar{left:14px;top:90px}.player-lobby-shell .menu-back-bar{left:16px;top:calc(var(--lobby-header) + 6px)}.player-lobby-shell.has-menu-back .menu-layer{padding-top:72px}.player-lobby-shell.has-menu-back .lobby-menu-panel{padding-top:24px}}
+
+/* Slide within the menu viewport; the court, player and fixed back arrow stay put. */
+.lobby-menu-motion{position:relative;flex:1;width:100%;height:100%;min-width:0;min-height:0;overflow:hidden;isolation:isolate}
+.lobby-menu-motion-live{position:relative;width:100%;height:100%;z-index:1}
+.lobby-menu-motion-ghost{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden}
+.lobby-menu-motion-ghost:empty{display:none}
+.lobby-menu-motion-ghost>.lobby-menu-panel{height:100%;pointer-events:none;user-select:none}
+@media(max-width:760px){.lobby-menu-motion,.lobby-menu-motion-live{height:auto}.lobby-menu-motion-ghost>.lobby-menu-panel{height:100%;overflow:hidden}}
