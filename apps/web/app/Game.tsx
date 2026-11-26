@@ -1,4 +1,5 @@
 'use client';
+import QuickMatchDialog,{FOUND_NOTICE_MS} from './QuickMatchDialog';
 import SlidingLobbyMenu from './SlidingLobbyMenu';
 import PlayerLobby,{LobbyBackdrop,type LobbyAction} from './PlayerLobby';
 import './playerLobby.css';
@@ -25,6 +26,8 @@ function storage():Store|undefined{try{return window.localStorage;}catch{return 
 export default function Game(){
  const canvas=useRef<HTMLCanvasElement>(null),runtime=useRef<ReturnType<typeof createGame>|null>(null),factory=useRef<typeof createGame|null>(null),sessionRef=useRef<OnlineSession|undefined>(undefined),gate=useRef(new ConnectionAttempt()),generation=useRef(0);
  const [quickSearching,setQuickSearching]=useState(false);
+ const [quickFound,setQuickFound]=useState(false);
+ const pendingQuick=useRef<{room:OnlineSession;finish:()=>void}|null>(null);
  const [preferredTeam,setPreferredTeam]=useState<TeamId|undefined>();
  const [onlinePage,setOnlinePage]=useState<OnlinePage>('LIST'),[listRefresh,setListRefresh]=useState(0);
  const [chatOpen,setChatOpen]=useState(false);
@@ -51,19 +54,21 @@ export default function Game(){
  const playing=screen==='PLAYING',connecting=screen==='CONNECTING';
  useEffect(()=>{const p=loadPreferences(storage(),'게스트'+Math.floor(1000+Math.random()*9000));setNickname(p.nickname);setAudio(p.audio);setCamera(p.camera);let savedColor=DEFAULT_PLAYER_COLOR;try{savedColor=playerColor(storage()?.getItem(PLAYER_COLOR_KEY));}catch{}setColor(savedColor);prefs.current={audio:p.audio,camera:p.camera,color:savedColor};music.current?.setSettings(p.audio);setProfileReady(true);},[]);
  useEffect(()=>{let cancelled=false;import('../game/createGame').then(m=>{if(!cancelled){factory.current=m.createGame;setFactoryReady(true);}}).catch(()=>{if(!cancelled)setError('게임 파일을 불러오지 못했습니다. 새로고침해주세요.');});return()=>{cancelled=true;};},[]);
- useEffect(()=>()=>{gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;sessionRef.current?.close();sessionRef.current=undefined;},[]);
+ useEffect(()=>()=>{cancelQuickNotice();gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;sessionRef.current?.close();sessionRef.current=undefined;},[]);
  useEffect(()=>{if(chatOpen||playing&&state.locked)return;const id=requestAnimationFrame(()=>document.querySelector<HTMLElement>('[data-menu-title]')?.focus());return()=>cancelAnimationFrame(id);},[screen,panel,state.locked,chatOpen,onlinePage]);
  useEffect(()=>{const escape=(e:KeyboardEvent)=>{if(e.code==='Escape'&&!document.pointerLockElement&&panel!=='MAIN'){setPanel('MAIN');e.preventDefault();}};window.addEventListener('keydown',escape);return()=>window.removeEventListener('keydown',escape);},[panel]);
+ function cancelQuickNotice(){const pending=pendingQuick.current;if(pending){void pending.room.close();pending.finish();}}
+ function showFound(room:OnlineSession){setQuickFound(true);return new Promise<void>(resolve=>{const finish=()=>{clearTimeout(timer);if(pendingQuick.current?.room===room)pendingQuick.current=null;resolve();};const timer=setTimeout(finish,FOUND_NOTICE_MS);pendingQuick.current={room,finish};});}
  function saveName(){const v=validateNickname(nickname);setNicknameError(v.error??'');if(v.error)return false;setNickname(v.name);savePreference(storage(),NICKNAME_KEY,v.name);return true;}
  function changeAudio(next:AudioSettings){prefs.current.audio=next;setAudio(next);savePreference(storage(),AUDIO_STORAGE_KEY,JSON.stringify(next));runtime.current?.setAudio(next);music.current?.setSettings(next);void music.current?.activate();}
  function changeColor(next:PlayerColor){const selected=playerColor(next);prefs.current.color=selected;setColor(selected);savePreference(storage(),PLAYER_COLOR_KEY,selected);runtime.current?.setCharacterColor(selected);}
  function changeCamera(next:boolean){prefs.current.camera=next;setCamera(next);savePreference(storage(),CAMERA_KEY,String(next));runtime.current?.setCameraMotion(next);}
- function openPanel(next:typeof panel){gate.current.cancel();if(connecting){setScreen('FRIENDS');}runtime.current?.pause();setPanel(next);}
- function home(){setRoomMode(mode=>mode==='teamDuel'||mode==='practice2v2'?'teamDuel':'duel');setQuickSearching(false);setChatOpen(false);gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;const left=sessionRef.current?.close();sessionRef.current=undefined;setSession(undefined);setSceneReady(false);setState(initial);setHasPlayed(false);setError('');setPanel('MAIN');setScreen('HOME');return left;}
+ function openPanel(next:typeof panel){cancelQuickNotice();gate.current.cancel();if(connecting){setScreen('FRIENDS');}runtime.current?.pause();setPanel(next);}
+ function home(){setRoomMode(mode=>mode==='teamDuel'||mode==='practice2v2'?'teamDuel':'duel');setQuickSearching(false);setChatOpen(false);cancelQuickNotice();gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;const left=sessionRef.current?.close();sessionRef.current=undefined;setSession(undefined);setSceneReady(false);setState(initial);setHasPlayed(false);setError('');setPanel('MAIN');setScreen('HOME');return left;}
  async function leaveOnline(){const online=!!sessionRef.current,left=home();if(!online)return;const token=gate.current.begin();if(token===null)return;await left;if(gate.current.current(token)){setOnlinePage('LIST');setListRefresh(n=>n+1);setScreen('FRIENDS');gate.current.finish(token);}}
- function navigate(next:'PRACTICE_SELECT'){if(!saveName())return;gate.current.cancel();void music.current?.activate();setError('');setPanel('MAIN');setScreen(next);}
- function browseLobby(page:LobbyAction){if(!saveName())return;gate.current.cancel();void music.current?.activate();setError('');setPanel('MAIN');setOnlinePage(page);setScreen('FRIENDS');}
- function quickLobby(){if(roomMode==='teamDuel')void join(false,undefined,undefined,true);else browseLobby('LIST');}
+ function navigate(next:'PRACTICE_SELECT'){if(!saveName())return;cancelQuickNotice();gate.current.cancel();void music.current?.activate();setError('');setPanel('MAIN');setScreen(next);}
+ function browseLobby(page:LobbyAction){if(!saveName())return;cancelQuickNotice();gate.current.cancel();void music.current?.activate();setError('');setPanel('MAIN');setOnlinePage(page);setScreen('FRIENDS');}
+ function quickLobby(){void join(false,undefined,undefined,true);}
  function enter(){void music.current?.activate();setError('');setPanel('MAIN');void runtime.current?.start();}
  function launch(online?:OnlineSession,autoStart=false){
   if(autoStart)void music.current?.activate();
@@ -75,25 +80,28 @@ export default function Game(){
  }
  async function join(create:boolean,target=roomId,settings?:RoomCreation,quick=false){
   if(!saveName())return;void music.current?.activate();if(!create&&!quick){const invalid=roomIdError(target);if(invalid){setError(invalid);return;}}
-  const token=gate.current.begin();if(token===null)return;setQuickSearching(quick);if(quick)setOnlinePage('LIST');setError('');setScreen('CONNECTING');
-  try{const {connectOnline,connectQuickPlay}=await import('../game/onlineClient');if(!gate.current.current(token))return;const connected=quick?await connectQuickPlay(validateNickname(nickname).name,prefs.current.color,()=>gate.current.current(token)):await connectOnline(create?undefined:target.trim(),validateNickname(nickname).name,settings?.mode??roomMode,settings,prefs.current.color,preferredTeam);
+  const token=gate.current.begin();if(token===null)return;setQuickSearching(quick);setQuickFound(false);if(quick)setOnlinePage('LIST');setError('');setScreen('CONNECTING');
+  try{const {connectOnline,connectQuickPlay}=await import('../game/onlineClient');if(!gate.current.current(token))return;const connected=quick?await connectQuickPlay(validateNickname(nickname).name,prefs.current.color,()=>gate.current.current(token),roomMode==='teamDuel'?'teamDuel':'duel'):await connectOnline(create?undefined:target.trim(),validateNickname(nickname).name,settings?.mode??roomMode,settings,prefs.current.color,preferredTeam);
    if(!gate.current.accept(token,connected))return;
+   if(quick){if(!connected.connected){await connected.close();throw Error('QUICK_DISCONNECTED');}await showFound(connected);if(!gate.current.accept(token,connected))return;if(!connected.connected){await connected.close();throw Error('QUICK_DISCONNECTED');}}
    if(!factory.current){connected.close();setScreen('FRIENDS');setError('코트를 준비 중입니다. 다시 눌러주세요.');return;}
    sessionRef.current=connected;setSession(connected);setRoomId(connected.room.roomId);
    if(!launch(connected)){connected.close();sessionRef.current=undefined;setSession(undefined);setScreen('FRIENDS');}
   }catch(e){if(gate.current.current(token)){setError(connectionError(e));setListRefresh(n=>n+1);setScreen(quick?'HOME':'FRIENDS');}}finally{if(gate.current.current(token))setQuickSearching(false);gate.current.finish(token);}
  }
  async function nextQuick(){const left=home(),token=gate.current.begin();if(token===null)return;await left;if(!gate.current.current(token))return;gate.current.finish(token);setRoomMode('teamDuel');await join(false,undefined,undefined,true);}
- function back(){const next=connecting?(quickSearching?'HOME':'FRIENDS'):'HOME';setQuickSearching(false);gate.current.cancel();setError('');if(next==='HOME')setRoomMode(mode=>mode==='teamDuel'||mode==='practice2v2'?'teamDuel':'duel');setScreen(next);setPanel('MAIN');}
+ function back(){const next=connecting?(quickSearching?'HOME':'FRIENDS'):'HOME';setQuickSearching(false);cancelQuickNotice();gate.current.cancel();setError('');if(next==='HOME')setRoomMode(mode=>mode==='teamDuel'||mode==='practice2v2'?'teamDuel':'duel');setScreen(next);setPanel('MAIN');}
  function menuBack(){if(panel!=='MAIN'){setPanel('MAIN');return;}back();}
  function chooseScenario(next:PracticeMode){setScenario(next);if(playing&&!session)runtime.current?.scenario(next);}
  const ping=state.online?.pingMs,pingQuality=ping==null?'unknown':ping<=100?'good':ping<=200?'fair':'poor';
- const showCard=!chatOpen&&(!playing||!state.locked&&(!state.online?.match||panel!=='MAIN'));
- const showMenuBack=!chatOpen&&(panel!=='MAIN'||!playing&&screen!=='HOME');
+ const quickModalOpen=connecting&&quickSearching;
+ const showCard=!quickModalOpen&&!chatOpen&&(!playing||!state.locked&&(!state.online?.match||panel!=='MAIN'));
+ const showMenuBack=!quickModalOpen&&!chatOpen&&(panel!=='MAIN'||!playing&&screen!=='HOME');
  const menuPage=panel!=='MAIN'?panel:screen==='FRIENDS'||connecting?`ONLINE_${onlinePage}`:screen;
  const menuDepth=panel!=='MAIN'?3:screen==='HOME'?0:1;
  const chooser=<fieldset className="scenario-choices"><legend>연습 선택</legend>{Object.entries(scenarios).map(([id,item])=><label key={id}><input type="radio" name="scenario" value={id} checked={scenario===id} onChange={()=>chooseScenario(id as PracticeMode)}/><span><strong>{item.name}</strong><small>{item.description}</small></span></label>)}</fieldset>;
  return <main className={`game ${!playing||!state.locked?'menu-shell':''} ${!playing?'player-lobby-shell':''} ${showMenuBack?'has-menu-back':''}`} onKeyDownCapture={e=>{if(e.code!=='Escape'&&(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement)&&!(e.target as HTMLElement).closest('.room-chat'))e.stopPropagation();}}>
+  {quickModalOpen&&<QuickMatchDialog team={roomMode==='teamDuel'} found={quickFound} onCancel={back}/>}
   <canvas ref={canvas} hidden={!playing} aria-label="농구 코트"/>
   {!playing&&<LobbyBackdrop color={color} nickname={nickname}/>}
   <div className="vignette"/>

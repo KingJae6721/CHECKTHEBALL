@@ -1,0 +1,7 @@
+import {useEffect,useRef} from 'react';
+export const FOUND_NOTICE_MS=700;
+export default function QuickMatchDialog({found,onCancel,team}:{found:boolean;onCancel:()=>void;team:boolean}){
+ const cancel=useRef<HTMLButtonElement>(null),cancelAction=useRef(onCancel);cancelAction.current=onCancel;
+ useEffect(()=>{const previous=document.activeElement as HTMLElement|null;cancel.current?.focus();const key=(event:KeyboardEvent)=>{if(event.code==='Escape'){event.preventDefault();event.stopImmediatePropagation();cancelAction.current();}else if(event.key==='Tab'){event.preventDefault();cancel.current?.focus();}};window.addEventListener('keydown',key,true);return()=>{window.removeEventListener('keydown',key,true);if(previous?.isConnected)previous.focus();};},[]);
+ return <div className="quick-match-layer"><section className="quick-match-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-match-title" aria-describedby="quick-match-detail"><div className={`quick-match-symbol ${found?'found':''}`} aria-hidden="true">{found?<svg viewBox="0 0 48 48"><path d="m11 25 9 9 18-20"/></svg>:<span/>}</div><p className="quick-match-kicker">QUICK PLAY · {team?'2대2':'1대1'}</p><div role="status" aria-live="polite" aria-atomic="true"><h2 id="quick-match-title" tabIndex={-1} data-menu-title>{found?'방을 찾았습니다!':'방을 찾고 있습니다…'}</h2><p id="quick-match-detail">{found?'잠시 후 경기 준비 화면으로 이동합니다.':'참가할 수 있는 방을 확인하고 있습니다.'}</p></div><button ref={cancel} type="button" onClick={onCancel}>{found?'입장 취소':'매칭 취소'}</button></section></div>;
+}

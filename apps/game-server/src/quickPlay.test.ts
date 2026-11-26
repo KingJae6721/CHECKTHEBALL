@@ -23,3 +23,25 @@ test('B: bounded race retries release the allocator queue; backend failures neve
  const q=new QuickPlay(api as any);await assert.rejects(q.request(payload()),/backend unavailable/);await assert.rejects(q.request(payload()),/backend unavailable/);assert.equal(creates,0);assert.equal(reserves,2);
  api.reserveSeatFor=async()=>{reserves++;live=false;throw Error('deleted');};api.query=async()=>{live=true;return [{roomId:'test'}];};await assert.rejects(q.request(payload()),/QUICK_RACE_LIMIT/);assert.equal(reserves,5);assert.equal(creates,0);
 });
+
+
+test('duel quick play reserves two seats, separates modes and rejects request mode changes',async()=>{
+ const server=makeServer();await server.listen(0,'127.0.0.1');const base='http://127.0.0.1:'+(server.transport.server!.address() as {port:number}).port,client=new Client(base.replace('http:','ws:')),clients:Room[]=[];
+ const post=(value:unknown)=>fetch(base+'/quick-play',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(value)});
+ try{
+  clients.push(await client.create('basketball',{mode:'teamDuel'}));
+  clients.push(await client.create('basketball',{mode:'duel',isPrivate:true}));
+  const request={...payload(),mode:'duel'};
+  const replies=await Promise.all([post(request),post({...payload(),mode:'duel'})]);
+  for(const reply of replies)assert.equal(reply.status,200);
+  const seats=await Promise.all(replies.map(reply=>reply.json()));
+  assert.equal(seats[0].roomId,seats[1].roomId);
+  assert.ok(clients.every(room=>room.roomId!==seats[0].roomId));
+  assert.equal((await post({...request,mode:'teamDuel'})).status,409);
+  const thirdResponse=await post({...payload(),mode:'duel'});assert.equal(thirdResponse.status,200);
+  const third=await thirdResponse.json();assert.notEqual(third.roomId,seats[0].roomId);
+  for(const seat of [...seats,third])clients.push(await client.consumeSeatReservation(seat));
+  const room=matchMaker.getLocalRoomById(seats[0].roomId) as BasketballRoom;
+  assert.equal(room.world.mode,'duel');assert.equal(room.world.actors.size,2);assert.equal(room.maxClients,2);assert.equal(room.world.match!.stage,'WAITING');
+ }finally{await Promise.all(clients.filter(room=>room.connection?.isOpen).map(room=>room.leave()));await server.gracefullyShutdown(false);}
+});

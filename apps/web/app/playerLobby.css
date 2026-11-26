@@ -45,3 +45,11 @@
 @media(prefers-reduced-motion:reduce){.player-lobby-shell .menu-card button,.player-lobby-shell .menu-utility{transition:none}.player-lobby-shell .menu-card button:not(:disabled):hover,.player-lobby-shell .menu-utility:hover,.player-lobby-shell .menu-card button:not(:disabled):active{transform:none}}
 
 .player-lobby-shell .menu-secondary{background:#244551;border-color:#c7dbe05c}
+
+/* Confirm a real connection before leaving the matchmaking dialog. */
+.quick-match-layer{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:24px;background:#061b277d;backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+.quick-match-dialog{width:min(440px,100%);padding:38px 28px 28px;text-align:center;border:1px solid #e5e8dd52;border-radius:20px;background:linear-gradient(145deg,#183d49f5,#102936f5);box-shadow:0 30px 90px #00131c66;color:#fff2dc}
+.quick-match-kicker{font-size:11px;font-weight:800;letter-spacing:2px;color:#ffc38b;margin:22px 0 10px}.quick-match-dialog h2{font-size:27px;letter-spacing:-1px;margin:0 0 12px}.quick-match-dialog #quick-match-detail{font-size:15px;line-height:1.7;color:#c4d5d9;margin:0}.quick-match-dialog button{width:100%;margin-top:28px;padding:13px 20px;border:1px solid #d2dfdf66;border-radius:8px;background:#ffffff09;color:#f8ead6;font-family:inherit;font-weight:700;font-size:16px;cursor:pointer}.quick-match-dialog button:hover{background:#ffffff16;border-color:#ffc48e}.quick-match-dialog button:focus-visible{outline:3px solid #ffc48e;outline-offset:4px}
+.quick-match-symbol{height:64px;width:64px;margin:0 auto;display:grid;place-items:center}.quick-match-symbol>span{width:54px;height:54px;border:4px solid #ffc48e30;border-top-color:#ffc48e;border-right-color:#ffc48e85;border-radius:50%;animation:quick-match-spin .85s linear infinite}.quick-match-symbol.found{border-radius:50%;background:#ffc18a1c;color:#ffc18a}.quick-match-symbol svg{width:46px;height:46px;fill:none;stroke:currentColor;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}
+@keyframes quick-match-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.quick-match-symbol>span{animation:none;border-color:#ffc48e}}
