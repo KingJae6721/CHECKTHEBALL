@@ -111,3 +111,55 @@ export function movePair(starts:XZ[],deltas:XZ[],diagnostics?:PairDiagnostics):X
  if(diagnostics){diagnostics.recovered=true;diagnostics.reason='solver-safe-reset';}return safe();
 }
 
+
+// Up to four moving bodies: global earliest relative circle hit, bounded contact
+// projection. Screens contribute their existing three horizontal cylinders.
+export function moveGroup(starts:XZ[],deltas:XZ[],screens:(ScreenState|undefined)[],diagnostics:PairDiagnostics):XZ[]{
+ let positions=starts.map(p=>({...p}));
+ const obstacles=(i:number,p=positions)=>p.flatMap((q,j)=>i===j?[]:bodyShapes('group-'+j,q,screens[j]));
+ const valid=(p:XZ[])=>p.every((q,i)=>bodyShapes('self',q,screens[i]).every(shape=>validBodyPosition(shape,obstacles(i,p))));
+ if(!valid(positions)){
+  diagnostics.recovered=true;diagnostics.reason='group-overlap-recovery';
+  // Recover each body against all others, then validate the entire set again.
+  for(let pass=0;pass<BODY.recoveryIterations&&!valid(positions);pass++)for(let i=0;i<positions.length;i++)positions[i]=recoverBody(positions[i],obstacles(i)).position;
+  if(!valid(positions)){
+   diagnostics.reason='group-safe-reset';positions=[];
+   for(let i=0;i<starts.length;i++){
+    const bodies=positions.flatMap((q,j)=>bodyShapes('safe-'+j,q,screens[j]));
+    const candidates:XZ[]=[];for(let z=bounds.minZ+.7;z<bounds.maxZ-.7;z+=1.4)for(let x=bounds.minX+.7;x<bounds.maxX-.7;x+=1.4)candidates.push({x,z});
+    const safe=candidates.find(p=>bodyShapes('candidate',p,screens[i]).every(shape=>validBodyPosition(shape,bodies)));
+    if(!safe)throw new RangeError('No safe group spawn');positions.push(safe);
+   }
+  }
+ }
+ const safe=positions.map(p=>({...p}));let remaining=deltas.map(d=>({...d}));
+ for(let iteration=0;iteration<BODY.iterations;iteration++){
+  if(remaining.every(d=>Math.hypot(d.x,d.z)<BODY.tolerance))break;
+  let time=1;const hits:{i:number;j:number;n:XZ}[]=[];
+  const offer=(t:number,i:number,j:number,n:XZ)=>{if(t< -BODY.tolerance||t>1)return;if(t<time-BODY.tolerance){time=Math.max(0,t);hits.length=0;}if(Math.abs(t-time)<=BODY.tolerance)hits.push({i,j,n});};
+  for(let i=0;i<positions.length;i++){
+   const a=positions[i],da=remaining[i];
+   for(const shape of bodyShapes('a',a,screens[i])){
+    if(da.x<0)offer((bounds.minX-shape.x)/da.x,i,-1,{x:1,z:0});if(da.x>0)offer((bounds.maxX-shape.x)/da.x,i,-1,{x:-1,z:0});
+    if(da.z<0)offer((bounds.minZ-shape.z)/da.z,i,-1,{x:0,z:1});if(da.z>0)offer((bounds.maxZ-shape.z)/da.z,i,-1,{x:0,z:-1});
+    for(let j=i+1;j<positions.length;j++)for(const b of bodyShapes('b',positions[j],screens[j])){
+     const dx=shape.x-b.x,dz=shape.z-b.z,vx=da.x-remaining[j].x,vz=da.z-remaining[j].z,A=vx*vx+vz*vz,B=dx*vx+dz*vz,C=dx*dx+dz*dz-(shape.radius+b.radius)**2,disc=B*B-A*C;
+     if(A<1e-14||B>=0||disc<0)continue;const t=(-B-Math.sqrt(disc))/A,nx=dx+vx*t,nz=dz+vz*t,length=Math.hypot(nx,nz);if(length>BODY.tolerance)offer(t,i,j,{x:nx/length,z:nz/length});
+    }
+   }
+  }
+  const speed=Math.max(...remaining.map(d=>Math.hypot(d.x,d.z)),BODY.tolerance),travel=hits.length?Math.max(0,time-BODY.skin/speed):1;
+  positions=positions.map((p,i)=>({x:p.x+remaining[i].x*travel,z:p.z+remaining[i].z*travel}));
+  if(!hits.length)break;
+  remaining=remaining.map(d=>({x:d.x*(1-time),z:d.z*(1-time)}));
+  // Revisit simultaneous contacts so the third/fourth body cannot invalidate
+  // a previously resolved normal. Never transfer motion to a stationary actor.
+  for(let pass=0;pass<positions.length;pass++)for(const hit of hits){
+   const a=remaining[hit.i],dot=a.x*hit.n.x+a.z*hit.n.z;if(dot<0){a.x-=hit.n.x*dot;a.z-=hit.n.z*dot;}
+   if(hit.j>=0){const b=remaining[hit.j],dot=b.x*hit.n.x+b.z*hit.n.z;if(dot>0){b.x-=hit.n.x*dot;b.z-=hit.n.z*dot;}}
+  }
+ }
+ // Exhaustion discards movement; an invalid final set returns to the jointly
+ // validated starting set, never a partially recovered overlap.
+ return valid(positions)?positions:safe;
+}

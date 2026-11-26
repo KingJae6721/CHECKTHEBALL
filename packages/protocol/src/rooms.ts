@@ -1,6 +1,6 @@
 import type {RoomMode} from '../../game-core/src/match';
 export const ROOM_DIRECTORY={maxName:30,maxPayloadBytes:1200,maxResults:50,requestTimeoutMs:8000} as const;
-export const ROOM_CAPACITY:Record<RoomMode,number>={duel:2,practice:2};
+export const ROOM_CAPACITY:Record<RoomMode,number>={duel:2,practice:2,practice2v2:4,teamDuel:4};
 export type RoomCreation={roomName:string;mode:RoomMode;isPrivate:boolean};
 export type PublicRoom={roomId:string;roomName:string;mode:RoomMode;players:number;maxPlayers:number;status:'WAITING'};
 export function roomName(value:unknown,nickname='게스트'):{name:string;error:string|null}{
@@ -15,8 +15,8 @@ export function roomCreation(value:unknown):{options:RoomCreation;error:string|n
  if(value!==undefined&&(!value||typeof value!=='object'||Array.isArray(value)))return {options:fallback,error:'방 설정을 확인해주세요.'};
  const v=(value??{}) as Record<string,unknown>;
  try{if(new TextEncoder().encode(JSON.stringify(v)).length>ROOM_DIRECTORY.maxPayloadBytes)return {options:fallback,error:'방 설정 요청이 너무 큽니다.'};}catch{return {options:fallback,error:'방 설정을 확인해주세요.'};}
- if(v.mode!==undefined&&v.mode!=='duel'&&v.mode!=='practice')return {options:fallback,error:'지원하지 않는 경기 모드입니다.'};
+ if(v.mode!==undefined&&v.mode!=='duel'&&v.mode!=='practice'&&v.mode!=='practice2v2'&&v.mode!=='teamDuel')return {options:fallback,error:'지원하지 않는 경기 모드입니다.'};
  if(v.isPrivate!==undefined&&typeof v.isPrivate!=='boolean')return {options:fallback,error:'공개 설정을 확인해주세요.'};
  const named=roomName(v.roomName,typeof v.nickname==='string'?v.nickname:'게스트');
- return {options:{roomName:named.name,mode:v.mode==='duel'?'duel':'practice',isPrivate:v.isPrivate===true},error:named.error};
+ return {options:{roomName:named.name,mode:v.mode==='duel'?'duel':v.mode==='practice2v2'?'practice2v2':v.mode==='teamDuel'?'teamDuel':'practice',isPrivate:v.isPrivate===true},error:named.error};
 }

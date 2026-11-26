@@ -1,3 +1,4 @@
+import {isTeamId,type TeamId} from '../../../packages/game-core/src/teams';
 import {DEFAULT_PLAYER_COLOR,isPlayerColor,type PlayerColor} from '../../../packages/protocol/src/playerColor';
 import {matchPlayable,type MatchIntent,type RoomMode} from '../../../packages/game-core/src/match';
 import {Samples} from '../../../packages/protocol/src/diagnostics';
@@ -57,12 +58,14 @@ export class OnlineSession{
  get matchRemainingMs(){const m=this.latest?.match,end=m?.countdownEnd??m?.setupEnd;return end==null?0:Math.max(0,end-(performance.now()+(this.clockOffset??0)));}
  matchIntent(intent:MatchIntent['intent']){const m=this.latest?.match;if(m&&this.connected&&!this.closed)this.room.send('matchIntent',{matchId:m.id,intent});}
  setPlayerColor(color:PlayerColor){if(!this.closed&&this.connected&&isPlayerColor(color))this.room.send('playerColor',color);}
+ setTeam(teamId:TeamId){if(this.connected&&!this.closed&&isTeamId(teamId))this.room.send('teamChange',teamId);}
  get ownsBall(){return this.latest?.ownerId===this.room.sessionId;}
  receive=(state:{frame:string})=>{
   if(!state.frame||this.closed)return;const frame=JSON.parse(state.frame) as WorldSnapshot,last=this.latest;
   if(frame.protocolVersion!==NETWORK.protocolVersion){this.connected=false;this.chat.setConnected(false);this.status=`통신 규약 불일치: 웹 v${NETWORK.protocolVersion} / 서버 ${frame.protocolVersion===undefined?'버전 없음(이전 서버)':'v'+frame.protocolVersion}. 같은 포트의 이전 게임 서버 또는 오래된 dist 실행 여부를 확인하세요.`;if(this.room.connection?.isOpen)void this.room.leave();return;}
   if(last&&(frame.tick<=last.tick||frame.time<=last.time)){this.droppedSnapshots++;return;}
-  const boundary=!!frame.match&&(!last?.match||frame.match.epoch!==last.match.epoch);
+  const teamReset=frame.players.some(a=>a.id===this.room.sessionId&&(a.relocationEpoch??0)!==(last?.players.find(b=>b.id===a.id)?.relocationEpoch??0));
+  const boundary=teamReset||!!frame.match&&(!last?.match||frame.match.epoch!==last.match.epoch);
   if(boundary){this.frames.length=0;this.renderTime=-Infinity;this.renderBase=-1;this.renderFrame=undefined;this.pendingJump=false;this.phaseOverride=undefined;this.barrier=0;this.lastPump=0;this.accumulator=0;}
   const now=performance.now(),offset=frame.time-now;if(this.lastReceiveAt)this.snapshotGaps.add(now-this.lastReceiveAt);this.lastReceiveAt=now;
   this.clockOffset=this.clockOffset===undefined||Math.abs(offset-this.clockOffset)>NETWORK.maxPredictionGapMs?offset:this.clockOffset+Math.max(-2,Math.min(2,offset-this.clockOffset))*.1;
@@ -72,7 +75,7 @@ export class OnlineSession{
   const waiting=this.barrier>0,finished=waiting&&self.processedActionSeq>=this.barrier;
   if(finished){this.barrier=0;this.lastPump=0;this.accumulator=0;}
   if(this.phaseOverride&&self.processedActionSeq>=this.phaseOverride.seq)this.phaseOverride=undefined;
-  this.prediction.accept(self,frame.players.find(a=>a.id!==self.id),boundary||waiting||!this.prediction.actor);const span=now-this.rateAt;if(!this.rateAt||span>=1000){if(this.rateAt)this.rates={generatedPerSecond:(this.generated-this.rateGenerated)*1000/span,receivedPerSecond:(self.net.received-this.rateReceived)*1000/span,consumedPerSecond:(self.net.consumed-this.rateConsumed)*1000/span};this.rateAt=now;this.rateGenerated=this.generated;this.rateConsumed=self.net.consumed;this.rateReceived=self.net.received;}this.record('snapshot');
+  this.prediction.accept(self,frame.players.filter(a=>a.id!==self.id),boundary||waiting||!this.prediction.actor);const span=now-this.rateAt;if(!this.rateAt||span>=1000){if(this.rateAt)this.rates={generatedPerSecond:(this.generated-this.rateGenerated)*1000/span,receivedPerSecond:(self.net.received-this.rateReceived)*1000/span,consumedPerSecond:(self.net.consumed-this.rateConsumed)*1000/span};this.rateAt=now;this.rateGenerated=this.generated;this.rateConsumed=self.net.consumed;this.rateReceived=self.net.received;}this.record('snapshot');
  };
  private write(input:Input,actions:Action[],moveSeq?:number){
   const seq=++this.seq;this.room.send('input',{seq,...(this.latest?.match?{matchId:this.latest.match.id,epoch:this.latest.match.epoch}:{}),...(moveSeq===undefined?{}:{moveSeq}),x:input.x,z:input.z,sprint:input.sprint,yaw:Math.atan2(Math.sin(input.yaw),Math.cos(input.yaw)),pitch:input.pitch,actions});return seq;
@@ -114,7 +117,7 @@ export class OnlineSession{
   const out=this.renderFrame!;out.time=mix(a.time,b.time,t);out.tick=mix(a.tick,b.tick,t);
   for(const p of out.players){
    const source=a.players.find(x=>x.id===p.id)!,q=b.players.find(x=>x.id===p.id);if(!q||p.id===this.room.sessionId)continue;
-   const teleported=q.lastPositionWriter.includes('safe-reset')&&q.recoveryCount!==source.recoveryCount;if(teleported){Object.assign(p.position,source.position);continue;}
+   const teleported=(q.relocationEpoch??0)!==(source.relocationEpoch??0)||q.lastPositionWriter.includes('safe-reset')&&q.recoveryCount!==source.recoveryCount;if(teleported){Object.assign(p.position,source.position);continue;}
    p.position.x=mix(source.position.x,q.position.x,t);p.position.y=mix(source.position.y,q.position.y,t);p.position.z=mix(source.position.z,q.position.z,t);
    if(source.screen.active===q.screen.active)p.screen.blend=mix(source.screen.blend,q.screen.blend,t);
    p.vy=mix(source.vy,q.vy,t);p.input.yaw=angle(source.input.yaw,q.input.yaw,t);p.input.pitch=mix(source.input.pitch,q.input.pitch,t);
@@ -135,8 +138,8 @@ export class OnlineSession{
  resetDiagnostics(){this.rtts.clear();this.jitter.clear();this.snapshotGaps.clear();this.underflowCount=0;this.underflowFrames=0;this.pingTimeouts=0;this.trace.length=0;this.prediction.corrections=0;this.prediction.totalCorrection=0;this.prediction.maxCorrection=0;this.prediction.lastCorrection=0;this.prediction.resets=0;this.droppedSnapshots=0;}
  close(){if(this.closed)return this.closing??Promise.resolve();this.closed=true;this.connected=false;this.chat.close();this.removePong?.();this.pings.clear();this.room.onStateChange.remove(this.receive);this.room.onDrop.remove(this.drop);this.room.onLeave.remove(this.drop);this.room.onError.remove(this.error);this.prediction.pending.length=0;this.closing=this.room.connection?.isOpen?(async()=>{let timer:ReturnType<typeof setTimeout>|undefined;try{await Promise.race([this.room.leave(),new Promise<void>(done=>{timer=setTimeout(done,3000);})]);}catch{}finally{clearTimeout(timer);}})():Promise.resolve();return this.closing;}
 }
-export async function connectOnline(roomId?:string,nickname?:string,mode:RoomMode='practice',settings?:RoomCreation,color:PlayerColor=DEFAULT_PLAYER_COLOR){const address=process.env.NEXT_PUBLIC_GAME_SERVER_URL;if(!address)throw Error('NEXT_PUBLIC_GAME_SERVER_URL을 설정하고 웹 서버를 다시 시작하세요.');if(!/^wss?:\/\//.test(address))throw Error('게임 서버 주소는 ws:// 또는 wss://로 설정하세요.');
- const client=new Client(address);const room=roomId?await client.joinById(roomId.trim(),{nickname,color}):await client.create('basketball',{...settings,nickname,mode,color});return new OnlineSession(room);
+export async function connectOnline(roomId?:string,nickname?:string,mode:RoomMode='practice',settings?:RoomCreation,color:PlayerColor=DEFAULT_PLAYER_COLOR,teamId?:TeamId){const address=process.env.NEXT_PUBLIC_GAME_SERVER_URL;if(!address)throw Error('NEXT_PUBLIC_GAME_SERVER_URL을 설정하고 웹 서버를 다시 시작하세요.');if(!/^wss?:\/\//.test(address))throw Error('게임 서버 주소는 ws:// 또는 wss://로 설정하세요.');
+ const client=new Client(address);const room=roomId?await client.joinById(roomId.trim(),{nickname,color,teamId}):await client.create('basketball',{...settings,nickname,mode,color,teamId});return new OnlineSession(room);
 }
 export function actorView(frame:WorldSnapshot,actor:ActorSnapshot,s:State=createState()):State{
  s.networked=true;s.screen=actor.screen;s.player=actor.position;s.vy=actor.vy;s.playerMotion=actor.motion;s.defense=actor.defense;s.locomotion=actor.locomotion;s.owner=frame.ownerId===actor.id?'player':frame.ownerId?'dummy':'none';s.phase=s.owner==='player'?actor.phase:frame.flightKind?'IN_FLIGHT':'RESOLVING';s.charge=actor.charge;s.passCharge=actor.passCharge;s.ball=frame.ball;s.ballVelocity=frame.velocity;s.flightKind=frame.flightKind;s.score=frame.score;s.attempts=frame.attempts;s.made=frame.made;s.resolved=frame.resolved;s.shotId=frame.shotId;s.message=frame.message;s.tick=frame.tick;return s;

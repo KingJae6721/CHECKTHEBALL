@@ -1,6 +1,6 @@
 import {integrateMovement,type MovingActor} from '../../../packages/game-core/src/movement';
 import {NETWORK} from '../../../packages/protocol/src/index';
-import {recoverBody} from '../../../packages/game-core/src/bodies';
+import {recoverBody,bodyShapes} from '../../../packages/game-core/src/bodies';
 import {BODY} from '../../../packages/game-core/src/court';
 import {advanceLocomotion} from '../../../packages/game-core/src/locomotion';
 import {CFG} from '../../../packages/game-core/src/simulation';
@@ -9,7 +9,7 @@ import type {Input,Phase,Vec} from '../../../packages/game-core/src/simulation';
 export type PredictedCommand={seq:number;moveSeq:number;input:Input;jump:boolean;phase:Phase;phaseSeq:number;sentAt?:number};
 const distance=(a:Vec,b:Vec)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
 export class MovementPrediction{
- actor:ActorSnapshot|undefined;remote:ActorSnapshot|undefined;pending:PredictedCommand[]=[];
+ actor:ActorSnapshot|undefined;remote:ActorSnapshot|undefined;remotes:ActorSnapshot[]=[];pending:PredictedCommand[]=[];
  position:Vec={x:0,y:0,z:0};vy=0;offset:Vec={x:0,y:0,z:0};
  previousPosition:Vec={x:0,y:0,z:0};private lastStepAt=0;private renderOffset:Vec={x:0,y:0,z:0};
  corrections=0;totalCorrection=0;maxCorrection=0;lastCorrection=0;serverError=0;replayError=0;writer='waiting-authority';resets=0;
@@ -18,15 +18,15 @@ export class MovementPrediction{
   const local:MovingActor={position:this.position,vy:this.vy,phase,input:command.input,enabled:true,jump:command.jump,screen:this.actor?.screen};
   // Conservative collision proxy at the latest authoritative remote position.
   // The server still solves both moving actors and is the final authority.
-  const actors=[local];if(this.remote){const p=this.remote.position;Object.assign(this.position,recoverBody(this.position,[{id:this.remote.id,x:p.x,z:p.z,radius:BODY.radius}]).position);actors.push({position:{...p},vy:0,phase:this.remote.phase,input:this.remote.input,enabled:false,jump:false,screen:{...this.remote.screen}});}
+  const actors=[local];if(this.remotes.length){Object.assign(this.position,recoverBody(this.position,this.remotes.flatMap(p=>bodyShapes(p.id,p.position,p.screen))).position);for(const remote of this.remotes)actors.push({position:{...remote.position},vy:0,phase:remote.phase,input:remote.input,enabled:false,jump:false,screen:{...remote.screen}});}
   Object.assign(this.previousPosition,this.position);
   const before={...this.position},movement=integrateMovement(actors);this.vy=local.vy;
   if(movement.recovered)Object.assign(this.previousPosition,this.position);
   if(this.actor){this.actor.vy=this.vy;advanceLocomotion(this.actor.locomotion,this.position.x-before.x,this.position.z-before.z,CFG.dt,command.input.yaw,this.position.y===0);}
  }
- accept(authority:ActorSnapshot,remote:ActorSnapshot|undefined,reset=false){
+ accept(authority:ActorSnapshot,remote:ActorSnapshot|ActorSnapshot[]|undefined,reset=false){
   const hadActor=!!this.actor,before={...this.position},visual={x:this.position.x+this.offset.x,y:this.position.y+this.offset.y,z:this.position.z+this.offset.z};
-  this.remote=remote;this.serverError=hadActor?distance(before,authority.position):0;
+  this.remotes=Array.isArray(remote)?remote:remote?[remote]:[];this.remote=this.remotes[0];this.serverError=hadActor?distance(before,authority.position):0;
   this.pending=this.pending.filter(c=>c.moveSeq>authority.processedMoveSeq);
   Object.assign(this.position,authority.position);Object.assign(this.previousPosition,authority.position);this.vy=authority.vy;
   this.actor={...authority,screen:{...authority.screen},position:this.position,locomotion:{...authority.locomotion,velocity:{...authority.locomotion.velocity}}};

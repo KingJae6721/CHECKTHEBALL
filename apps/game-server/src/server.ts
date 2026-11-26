@@ -1,3 +1,5 @@
+import {teamMode} from '../../../packages/game-core/src/match';
+import {isTeamId} from '../../../packages/game-core/src/teams';
 import {isPlayerColor} from '../../../packages/protocol/src/playerColor';
 import {Server,Room,type Client} from '@colyseus/core';
 import {Schema,defineTypes} from '@colyseus/schema';
@@ -12,8 +14,10 @@ import {directoryRouter} from './publicRooms';
 export class CourtEnvelope extends Schema{declare tick:number;declare frame:string;constructor(){super();this.tick=0;this.frame='';}}
 defineTypes(CourtEnvelope,{tick:'uint32',frame:'string'});
 export class BasketballRoom extends Room<{state:CourtEnvelope}>{
- private chat!:RoomChat;
+ private chat!:RoomChat;private teamRequests=new Map<string,{at:number;count:number}>();
  directoryName='';directoryPrivate=false;
+ private admissionLocked:boolean|undefined;private admissionWrite=Promise.resolve();
+ private syncAdmission(){if(!this.world.match?.teams)return;const locked=this.world.match.stage!=='WAITING';if(locked===this.admissionLocked)return;this.admissionLocked=locked;this.admissionWrite=this.admissionWrite.then(async()=>{if(!this.listingDisposed){if(locked)await this.lock();else await this.unlock();}}).catch(()=>{this.admissionLocked=undefined;});}
  private listingKey='';private listingPending:Record<string,unknown>|undefined;private listingWrite:Promise<void>|undefined;private listingDisposed=false;
  private syncListing(){
   if(this.listingDisposed)return;
@@ -31,6 +35,7 @@ export class BasketballRoom extends Room<{state:CourtEnvelope}>{
  private tickSamples=new Samples(600);private scheduleSamples=new Samples(200);private sampledAt=0;private pingAt=new Map<string,number>();
  async onCreate(options?:unknown){const parsed=roomCreation(options);if(parsed.error)throw Error('INVALID_ROOM_OPTIONS');const settings=parsed.options;this.directoryName=settings.roomName;this.directoryPrivate=settings.isPrivate;this.maxClients=ROOM_CAPACITY[settings.mode];this.world=new OnlineWorld(settings.mode);await this.setMatchmaking({private:settings.isPrivate,metadata:{roomName:settings.roomName,mode:settings.mode,stage:'WAITING',players:0,readyCount:0}});this.setState(new CourtEnvelope());this.setPatchRate(1000/NETWORK.snapshotRate);let accumulator=0,lastPublished=0,lastCallback=performance.now();
   this.setSimulationInterval(ms=>{const now=performance.now(),step=1000/NETWORK.tickRate;this.timing.callbackGapMs=now-lastCallback;lastCallback=now;this.timing.scheduleDelayMs=Math.max(0,this.timing.callbackGapMs-step);this.scheduleSamples.add(this.timing.scheduleDelayMs);this.timing.discardedTimeMs+=Math.max(0,ms-150);accumulator+=Math.min(ms,150);let steps=0;while(accumulator>=step&&steps++<8){const started=performance.now();this.world.step();this.timing.tickMs=performance.now()-started;this.tickSamples.add(this.timing.tickMs);this.timing.maxTickMs=Math.max(this.timing.maxTickMs,this.timing.tickMs);accumulator-=step;}this.timing.debtMs=accumulator;if(now-this.sampledAt>=1000){const tick=this.tickSamples.summary();this.timing.tickP50Ms=tick.p50;this.timing.tickP95Ms=tick.p95;this.timing.scheduleP95Ms=this.scheduleSamples.summary().p95;this.sampledAt=now;}if(this.world.tick-lastPublished>=3){this.publish();lastPublished=this.world.tick;}},1000/NETWORK.tickRate);
+  this.onMessage('teamChange',(client,value)=>{const now=performance.now(),rate=this.teamRequests.get(client.sessionId);if(!rate||now-rate.at>=5000)this.teamRequests.set(client.sessionId,{at:now,count:1});else if(++rate.count>6){client.send('teamError',{code:'TEAM_COOLDOWN'});return;}const error=this.world.changeTeam(client.sessionId,value);if(error)client.send('teamError',{code:error});else{this.publish();client.send('teamChanged',{teamId:this.world.actors.get(client.sessionId)?.teamId});}});
   this.onMessage('playerColor',(client,color)=>{const actor=this.world.actors.get(client.sessionId);if(actor&&isPlayerColor(color))actor.color=color;});
   this.onMessage('input',(client,value)=>this.world.receive(client.sessionId,value));
   this.chat=new RoomChat(this.roomId);
@@ -39,10 +44,10 @@ export class BasketballRoom extends Room<{state:CourtEnvelope}>{
   this.onMessage('matchIntent',(client,value)=>{if(this.world.intent(client.sessionId,value))this.publish();});
   this.onMessage('diagnosticPing',(client,value)=>{const now=performance.now();if(!value||!Number.isSafeInteger(value.id)||value.id<0||now-(this.pingAt.get(client.sessionId)??-Infinity)<500)return;this.pingAt.set(client.sessionId,now);client.send('diagnosticPong',{id:value.id});});
  }
- publish(){this.syncListing();this.state.tick=this.world.tick;this.state.frame=JSON.stringify({...this.world.snapshot(),serverTiming:this.timing});}
- onAuth(_client:Client,options?:{nickname?:unknown;color?:unknown}){if(!this.world.canJoin())throw Error('MATCH_NOT_JOINABLE');if(options?.color!==undefined&&!isPlayerColor(options.color))throw Error('INVALID_PLAYER_COLOR');if(options?.nickname!==undefined&&validateNickname(options.nickname).error)throw Error('INVALID_NICKNAME');return true;}
- onJoin(client:Client,options?:{nickname?:unknown;color?:unknown}){this.world.join(client.sessionId,typeof options?.nickname==='string'?options.nickname:undefined,options?.color);this.chat.join(client.sessionId);this.publish();}
- onLeave(client:Client){this.chat.leave(client.sessionId);this.pingAt.delete(client.sessionId);this.world.leave(client.sessionId);this.publish();}
- async onDispose(){this.listingDisposed=true;this.listingPending=undefined;await this.listingWrite;this.chat?.dispose();}
+ publish(){this.syncAdmission();this.syncListing();this.state.tick=this.world.tick;this.state.frame=JSON.stringify({...this.world.snapshot(),serverTiming:this.timing});}
+ onAuth(_client:Client,options?:{nickname?:unknown;color?:unknown;teamId?:unknown}){if(!this.world.canJoin())throw Error('MATCH_NOT_JOINABLE');if(options?.teamId!==undefined&&!isTeamId(options.teamId))throw Error('INVALID_TEAM');if(teamMode(this.world.mode)&&options?.teamId&&[...this.world.actors.values()].filter(a=>a.teamId===options.teamId).length>=2)throw Error('TEAM_FULL');if(options?.color!==undefined&&!isPlayerColor(options.color))throw Error('INVALID_PLAYER_COLOR');if(options?.nickname!==undefined&&validateNickname(options.nickname).error)throw Error('INVALID_NICKNAME');return true;}
+ onJoin(client:Client,options?:{nickname?:unknown;color?:unknown;teamId?:unknown}){this.world.join(client.sessionId,typeof options?.nickname==='string'?options.nickname:undefined,options?.color,options?.teamId);this.chat.join(client.sessionId);this.publish();}
+ onLeave(client:Client){this.teamRequests.delete(client.sessionId);this.chat.leave(client.sessionId);this.pingAt.delete(client.sessionId);this.world.leave(client.sessionId);this.publish();}
+ async onDispose(){this.listingDisposed=true;this.listingPending=undefined;await this.listingWrite;await this.admissionWrite;this.chat?.dispose();this.teamRequests.clear();}
 }
 export function makeServer(options:{webOrigins?:readonly string[]}={}){const origins=options.webOrigins??(process.env.GAME_WEB_ORIGINS??'').split(',').map(s=>s.trim()).filter(Boolean);const server=new Server({transport:new WebSocketTransport({maxPayload:4096}),greet:false});server.router=directoryRouter(origins);server.define('basketball',BasketballRoom);return server;}

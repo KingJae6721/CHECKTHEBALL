@@ -1,5 +1,6 @@
+import {TEAM,isTeamId,balancedTeam,teamSpawn,type TeamId} from './teams';
 import {playerColor,type PlayerColor} from '../../protocol/src/playerColor';
-import {createMatch,matchPlayable,validMatchIntent,MATCH,type MatchState,type RoomMode} from './match';
+import {createMatch,createTeamMatch,teamMode,matchPlayable,validMatchIntent,MATCH,type MatchState,type RoomMode} from './match';
 import {createScreen,toggleScreen,type ScreenState} from './screen';
 import {emitGameEvent,impactEvent,type GameEvent} from './gameEvents';
 import {integrateMovement,type MovingActor} from './movement';
@@ -12,16 +13,28 @@ import {createState,zeroInput,CFG,startCharge,startPassCharge,releaseShot,releas
 import {advanceBall} from './physics';
 import {evaluateAcquisition,outsideAcquisitionVolumes,passCatchPoint} from './acquisition';
 import {NETWORK,validInput,type Action} from '../../protocol/src/index';
-export type OnlineActor={color?:PlayerColor;screen:ScreenState;nickname?:string;processedInputSeq:number;processedMoveSeq:number;processedActionSeq:number;receivedMoveSeq:number;sequencedMovement:boolean;moves:{seq:number;moveSeq:number;input:Input;jump:boolean;at:number}[];net:{received:number;consumed:number;discarded:number;queueLength:number;oldestAgeMs:number;timeouts:number;lastCancel:string;lastCancelAt:number;lastReceiveAt:number};recoveryCount:number;lastPositionWriter:string;id:string;slot:number;position:Vec;vy:number;input:Input;motion:BallMotion;defense:DefenseState;locomotion:Locomotion;phase:Phase;charge:number;passCharge:number;ack:number;receivedAt:number;rateAt:number;rateCount:number;queue:{action:Action;input:Input;seq:number}[];buttons:Set<string>;score:number;attempts:number;made:number};
+export type OnlineActor={relocationEpoch?:number;teamId?:TeamId;lastTeamChange?:number;color?:PlayerColor;screen:ScreenState;nickname?:string;processedInputSeq:number;processedMoveSeq:number;processedActionSeq:number;receivedMoveSeq:number;sequencedMovement:boolean;moves:{seq:number;moveSeq:number;input:Input;jump:boolean;at:number}[];net:{received:number;consumed:number;discarded:number;queueLength:number;oldestAgeMs:number;timeouts:number;lastCancel:string;lastCancelAt:number;lastReceiveAt:number};recoveryCount:number;lastPositionWriter:string;id:string;slot:number;position:Vec;vy:number;input:Input;motion:BallMotion;defense:DefenseState;locomotion:Locomotion;phase:Phase;charge:number;passCharge:number;ack:number;receivedAt:number;rateAt:number;rateCount:number;queue:{action:Action;input:Input;seq:number}[];buttons:Set<string>;score:number;attempts:number;made:number};
 export type ActorSnapshot=Omit<OnlineActor,'queue'|'moves'|'buttons'|'rateAt'|'rateCount'|'receivedAt'>;
 export type WorldSnapshot={mode:RoomMode;match:MatchState|null;events?:GameEvent[];serverTiming?:{tickMs:number;maxTickMs:number;callbackGapMs:number;discardedTimeMs:number;supportsPing?:boolean;tickP50Ms?:number|null;tickP95Ms?:number|null;scheduleDelayMs?:number;scheduleP95Ms?:number|null;debtMs?:number};protocolVersion:number;tick:number;time:number;revision:number;ownerId:string|null;shooterId:string|null;passerId:string|null;players:ActorSnapshot[];ball:Vec;velocity:Vec;flightKind:State['flightKind'];resolved:boolean;shotId:number;score:number;attempts:number;made:number;message:string};
 export {movePair} from './bodies';
 export class OnlineWorld{
  readonly state=createState();readonly actors=new Map<string,OnlineActor>();time=0;tick=0;revision=0;ownerId:string|null=null;shooterId:string|null=null;passerId:string|null=null;lastTouchId:string|null=null;everJoined=false;private airborne=new Set<string>();
- possession=0;chargeStartedAt=new Map<string,number>();chargeVersions=new Map<string,number>();pickupLockedUntil=0;ledger=new Map<string,{score:number;attempts:number;made:number}>();
- readonly match:MatchState|null;private pendingAttack:string|null=null;private scoringShot:{matchId:number;id:number;shooterId:string;points:number;eligible:boolean}|null=null;
- constructor(readonly mode:RoomMode='practice',private random:()=>number=Math.random){this.match=mode==='duel'?createMatch():null;this.state.networked=true;}
+ private flightTeam:TeamId|undefined;possession=0;chargeStartedAt=new Map<string,number>();chargeVersions=new Map<string,number>();pickupLockedUntil=0;ledger=new Map<string,{score:number;attempts:number;made:number}>();
+ readonly match:MatchState|null;private pendingAttack:string|null=null;private scoringShot:{matchId:number;id:number;shooterId:string;shooterTeamId?:TeamId;points:number;eligible:boolean}|null=null;
+ constructor(readonly mode:RoomMode='practice',private random:()=>number=Math.random){this.match=mode==='duel'?createMatch():mode==='teamDuel'?createTeamMatch():null;this.state.networked=true;}
  canJoin(){return !this.match||this.match.stage==='WAITING';}
+ private completeTeams(){return this.actors.size===4&&(['A','B'] as TeamId[]).every(t=>[...this.actors.values()].filter(a=>a.teamId===t).length===2);}
+ private teamServer(team:TeamId){const m=this.match!,members=[...this.actors.values()].filter(a=>a.teamId===team).sort((a,b)=>a.slot-b.slot);if(!members.length)return;return members[m.teams!.nextServer[team]++%members.length].id;}
+ private teamIntent(id:string,value:unknown){
+  const m=this.match!;if(!this.actors.has(id)||!validMatchIntent(value)||value.matchId!==m.id)return false;
+  if(value.intent==='rematch'){
+   if(m.stage!=='FINISHED'||!this.completeTeams())return false;m.rematch[id]=true;
+   if([...this.actors.keys()].every(k=>m.rematch[k])){const first:TeamId=m.teams!.firstAttack==='A'?'B':'A';Object.assign(m,createTeamMatch(m.id+1,m.epoch+1));this.beginCountdown(this.teamServer(first)!);}return true;
+  }
+  if(m.stage!=='WAITING'&&m.stage!=='COUNTDOWN')return false;
+  m.ready[id]=value.intent==='ready';if(value.intent==='unready'&&m.stage==='COUNTDOWN'){m.stage='WAITING';m.countdownEnd=null;m.epoch++;m.notice='준비 취소로 대기 상태로 돌아왔습니다.';this.clearGameplay();}
+  if(m.stage==='WAITING'&&this.completeTeams()&&[...this.actors.keys()].every(k=>m.ready[k]))this.beginCountdown(this.teamServer(this.random()<.5?'A':'B')!);return true;
+ }
  private retireRejected(a:OnlineActor,v:{seq:number;moveSeq?:number}){
   if(v.seq<=a.ack)return;a.ack=v.seq;a.processedActionSeq=Math.max(a.processedActionSeq,v.seq);
   if(v.moveSeq!==undefined){a.receivedMoveSeq=Math.max(a.receivedMoveSeq,v.moveSeq);a.processedMoveSeq=Math.max(a.processedMoveSeq,v.moveSeq);a.processedInputSeq=v.seq;}
@@ -38,18 +51,21 @@ export class OnlineWorld{
  }
  private resetRound(attackerId:string){
   this.clearGameplay();const m=this.match!;m.attackId=attackerId;m.needsClear=false;
-  for(const a of this.actors.values()){a.position={x:0,y:0,z:a.id===attackerId?-1.5:0};a.recoveryCount++;a.lastPositionWriter='server:match-safe-reset';}
+  const attackTeam=this.actors.get(attackerId)?.teamId;if(m.teams){m.teams.attack=attackTeam??null;this.flightTeam=undefined;}
+  const assigned:TeamId[]=[];
+  for(const a of this.actors.values()){if(m.teams){const offense=a.teamId===attackTeam,number=assigned.filter(t=>t===a.teamId).length;assigned.push(a.teamId!);a.position={x:offense?(a.id===attackerId?0:-1.7):number*1.7,y:0,z:offense?-1.5:.2};a.relocationEpoch=(a.relocationEpoch??0)+1;}else a.position={x:0,y:0,z:a.id===attackerId?-1.5:0};a.recoveryCount++;a.lastPositionWriter='server:match-safe-reset';}
   this.changeOwner(null);this.shooterId=null;this.passerId=null;this.scoringShot=null;this.airborne.clear();
   const a=this.actors.get(attackerId);if(a){const s=this.focus(a);giveBall(s,'player');s.releaseAge=1;s.resolved=true;s.ball=controlledPosition(s,a.input,'player');this.commit(a);}
  }
  private beginCountdown(first:string){
-  const m=this.match!;m.firstAttacker=first;m.stage='COUNTDOWN';m.countdownEnd=this.time+MATCH.countdownMs;m.setupEnd=null;m.result=null;m.epoch++;
+  const m=this.match!;if(m.teams){m.teams.firstAttack=this.actors.get(first)!.teamId!;m.teams.scores={A:0,B:0};m.notice='전원 준비 완료';}m.firstAttacker=first;m.stage='COUNTDOWN';m.countdownEnd=this.time+MATCH.countdownMs;m.setupEnd=null;m.result=null;m.epoch++;
   this.pendingAttack=null;this.ledger.clear();this.state.events.recent.length=0;this.state.events.impactAt={};this.state.shotId++;
   this.state.score=0;this.state.made=0;this.state.attempts=0;
   for(const a of this.actors.values()){a.score=0;a.made=0;a.attempts=0;m.scores[a.id]=0;}
   this.resetRound(first);
  }
  intent(id:string,value:unknown){
+  if(this.match?.teams)return this.teamIntent(id,value);
   const m=this.match;if(!m||!this.actors.has(id)||!validMatchIntent(value)||value.matchId!==m.id)return false;
   if(value.intent==='rematch'){
    if(m.stage!=='FINISHED'||this.actors.size!==2)return false;m.rematch[id]=true;
@@ -68,27 +84,44 @@ export class OnlineWorld{
   if(m.stage==='PLAYING'&&m.setupEnd!==null&&this.time+1e-6>=m.setupEnd){m.setupEnd=null;m.epoch++;this.clearGameplay();}
   return matchPlayable(m);
  }
- private prepareAttack(id:string){const m=this.match!;m.attackId=id;m.needsClear=false;m.setupEnd=this.time+MATCH.setupMs;m.epoch++;this.pendingAttack=id;}
+ private prepareAttack(id:string){const m=this.match!;m.attackId=id;if(m.teams)m.teams.attack=this.actors.get(id)?.teamId??null;m.needsClear=false;m.setupEnd=this.time+MATCH.setupMs;m.epoch++;this.pendingAttack=id;}
  private result(winnerId:string|null,reason:'TARGET_SCORE'|'OPPONENT_LEFT'){
   const m=this.match!;if(m.result)return;
-  m.result={winnerId,reason,players:[...this.actors.values()].map(a=>({id:a.id,nickname:a.nickname??(a.slot===0?'플레이어 1':'플레이어 2'),score:m.scores[a.id]??0}))};
+  m.result={winnerId,reason,...(m.teams?{winnerTeam:winnerId?(this.scoringShot?.shooterTeamId??this.actors.get(winnerId)?.teamId):undefined,teamScores:{...m.teams.scores}}:{}),players:[...this.actors.values()].map(a=>({id:a.id,teamId:a.teamId,nickname:a.nickname??(a.slot===0?'플레이어 1':'플레이어 2'),score:m.scores[a.id]??0}))};
   m.stage=reason==='TARGET_SCORE'?'FINISHED':'ABORTED';m.countdownEnd=null;m.setupEnd=null;m.rematch={};m.epoch++;
  }
  private matchLeave(id:string){
   const m=this.match;if(!m||!this.actors.has(id))return;
   if(m.stage==='PLAYING')this.result(null,'OPPONENT_LEFT');
   else if(m.stage==='COUNTDOWN'||m.stage==='WAITING'){m.stage='WAITING';m.countdownEnd=null;m.setupEnd=null;m.ready={};delete m.scores[id];m.epoch++;}
-  m.rematch={};this.pendingAttack=null;this.clearGameplay();
+  if(m.teams)m.notice=m.stage==='FINISHED'?'참가자가 나가 재경기할 수 없습니다.':'참가자 변경으로 준비가 해제되었습니다.';m.rematch={};this.pendingAttack=null;this.clearGameplay();
  }
  focus(a:OnlineActor){const s=this.state;s.screen=a.screen;s.player=a.position;s.vy=a.vy;s.playerMotion=a.motion;s.defense=a.defense;s.locomotion=a.locomotion;s.charge=a.charge;s.passCharge=a.passCharge;
   s.owner=this.ownerId===a.id?'player':this.ownerId?'dummy':'none';s.phase=this.ownerId===a.id?a.phase:s.flightKind?'IN_FLIGHT':'RESOLVING';s.passFrom=this.passerId===a.id?'player':'dummy';s.dummyMotion=this.actors.get(this.ownerId??'')?.motion??createMotion();return s;
  }
- changeOwner(id:string|null){if(id!==null){this.lastTouchId=id;const m=this.match;if(m?.stage==='PLAYING'&&m.attackId!==id){m.attackId=id;m.needsClear=true;}}if(this.ownerId===id)return;const old=this.actors.get(this.ownerId??'');if(old){if(!(id===null&&old.motion.action==='RELEASE'&&old.motion.fired))cancelMotion(old.motion,this.state.ball,false);old.phase='HELD';old.charge=0;old.passCharge=0;this.chargeVersions.delete(old.id);this.chargeStartedAt.delete(old.id);}this.ownerId=id;this.possession++;this.revision++;}
+ changeOwner(id:string|null){if(id!==null){this.lastTouchId=id;const m=this.match;if(m?.stage==='PLAYING'){if(m.teams){const team=this.actors.get(id)?.teamId;if(team&&m.teams.attack!==team){m.teams.attack=team;m.needsClear=true;}m.attackId=id;}else if(m.attackId!==id){m.attackId=id;m.needsClear=true;}}}if(this.ownerId===id)return;const old=this.actors.get(this.ownerId??'');if(old){if(!(id===null&&old.motion.action==='RELEASE'&&old.motion.fired))cancelMotion(old.motion,this.state.ball,false);old.phase='HELD';old.charge=0;old.passCharge=0;this.chargeVersions.delete(old.id);this.chargeStartedAt.delete(old.id);}this.ownerId=id;this.possession++;this.revision++;}
  commit(a:OnlineActor){const s=this.state,target=s.owner==='player'?a.id:s.owner==='none'?null:this.ownerId;this.changeOwner(target);a.vy=s.vy;a.phase=this.ownerId===a.id?s.phase:'HELD';a.charge=this.ownerId===a.id?s.charge:0;a.passCharge=this.ownerId===a.id?s.passCharge:0;}
- join(id:string,nickname?:string,color?:unknown){if(!this.canJoin())throw Error('MATCH_NOT_JOINABLE');if(this.actors.size>=2)throw Error('ROOM_FULL');const slot=[0,1].find(n=>![...this.actors.values()].some(a=>a.slot===n))!;
-  const a:OnlineActor={color:playerColor(color),screen:createScreen(),processedInputSeq:-1,processedMoveSeq:0,processedActionSeq:-1,receivedMoveSeq:0,sequencedMovement:false,moves:[],net:{received:0,consumed:0,discarded:0,queueLength:0,oldestAgeMs:0,timeouts:0,lastCancel:'none',lastCancelAt:0,lastReceiveAt:0},recoveryCount:0,lastPositionWriter:'server:spawn',nickname:nickname?.replace(/[\x00-\x1f]/g,'').trim().slice(0,20)||undefined,id,slot,position:{x:slot===0?-1:1,y:0,z:-1.5},vy:0,input:zeroInput(),motion:createMotion(),defense:createDefense(),locomotion:createLocomotion(),phase:'HELD',charge:0,passCharge:0,ack:-1,receivedAt:this.time,rateAt:this.time,rateCount:0,queue:[],buttons:new Set(),score:0,attempts:0,made:0};
+ join(id:string,nickname?:string,color?:unknown,preferredTeam?:unknown){if(!this.canJoin())throw Error('MATCH_NOT_JOINABLE');if(this.actors.size>=(teamMode(this.mode)?4:2))throw Error('ROOM_FULL');
+  let teamId:TeamId|undefined;if(teamMode(this.mode)){if(preferredTeam!==undefined&&!isTeamId(preferredTeam))throw Error('INVALID_TEAM');teamId=isTeamId(preferredTeam)?preferredTeam:balancedTeam(this.actors.values());if([...this.actors.values()].filter(a=>a.teamId===teamId).length>=TEAM.capacity)throw Error('TEAM_FULL');}
+  const spawn=teamId?teamSpawn(teamId,this.actors.values()):undefined;if(teamId&&!spawn)throw Error('NO_SAFE_SPAWN');
+  const slot=[0,1,2,3].find(n=>![...this.actors.values()].some(a=>a.slot===n))!;
+  const a:OnlineActor={relocationEpoch:0,teamId,color:playerColor(color),screen:createScreen(),processedInputSeq:-1,processedMoveSeq:0,processedActionSeq:-1,receivedMoveSeq:0,sequencedMovement:false,moves:[],net:{received:0,consumed:0,discarded:0,queueLength:0,oldestAgeMs:0,timeouts:0,lastCancel:'none',lastCancelAt:0,lastReceiveAt:0},recoveryCount:0,lastPositionWriter:'server:spawn',nickname:nickname?.replace(/[\x00-\x1f]/g,'').trim().slice(0,20)||undefined,id,slot,position:{x:slot===0?-1:1,y:0,z:-1.5},vy:0,input:zeroInput(),motion:createMotion(),defense:createDefense(),locomotion:createLocomotion(),phase:'HELD',charge:0,passCharge:0,ack:-1,receivedAt:this.time,rateAt:this.time,rateCount:0,queue:[],buttons:new Set(),score:0,attempts:0,made:0};
+  if(spawn)Object.assign(a.position,spawn);
   const occupied=[...this.actors.values()];Object.assign(a.position,recoverBody(a.position,occupied.flatMap(b=>bodyShapes(b.id,b.position,b.screen))).position);
-  this.actors.set(id,a);if(this.match){this.match.ready[id]=false;this.match.rematch[id]=false;this.match.scores[id]=0;}if(!this.everJoined){this.ownerId=id;this.lastTouchId=id;this.state.ballVelocity={x:0,y:0,z:0};a.motion=createMotion('DRIBBLE');this.everJoined=true;this.possession++;this.focus(a);this.state.ball=controlledPosition(this.state,a.input,'player');}this.revision++;return a;
+  this.actors.set(id,a);if(this.match?.teams){this.match.ready={};this.match.notice='참가자 변경으로 전원 준비가 해제되었습니다.';}if(this.match){this.match.ready[id]=false;this.match.rematch[id]=false;this.match.scores[id]=0;}if(!this.everJoined){this.ownerId=id;this.lastTouchId=id;this.state.ballVelocity={x:0,y:0,z:0};a.motion=createMotion('DRIBBLE');this.everJoined=true;this.possession++;this.focus(a);this.state.ball=controlledPosition(this.state,a.input,'player');}this.revision++;return a;
+ }
+ changeTeam(id:string,value:unknown):string|null{
+  const a=this.actors.get(id);if(!a)return 'NOT_MEMBER';if(!teamMode(this.mode))return 'NOT_TEAM_PRACTICE';if(this.match&&this.match.stage!=='WAITING')return 'TEAM_LOCKED';if(!isTeamId(value))return 'INVALID_TEAM';if(a.teamId===value)return null;
+  if(a.lastTeamChange!==undefined&&this.time-a.lastTeamChange<TEAM.changeCooldownMs)return 'TEAM_COOLDOWN';
+  if([...this.actors.values()].filter(b=>b.teamId===value).length>=TEAM.capacity)return 'TEAM_FULL';
+  const position=teamSpawn(value,[...this.actors.values()].filter(b=>b.id!==id));if(!position)return 'NO_SAFE_SPAWN';
+  // Synchronous capacity check + assignment: no await/reservation gap.
+  const s=this.focus(a);cancelAllCharges(s);cancelDefense(s);this.commit(a);
+  if(this.ownerId===id){this.changeOwner(null);makeLoose(s);s.ballVelocity={x:0,y:0,z:0};}
+  a.net.discarded+=a.moves.length;a.moves.length=0;a.queue.length=0;a.buttons.clear();a.processedMoveSeq=a.receivedMoveSeq;a.processedInputSeq=Math.max(a.processedInputSeq,a.ack);a.processedActionSeq=Math.max(a.processedActionSeq,a.ack);
+  this.chargeVersions.delete(id);this.chargeStartedAt.delete(id);this.airborne.delete(id);
+  a.input=zeroInput();a.vy=0;a.phase='HELD';a.charge=0;a.passCharge=0;a.screen=createScreen();a.motion=createMotion('IDLE');a.defense=createDefense();a.locomotion=createLocomotion();
+  if(this.match?.teams){this.match.ready={};this.match.notice='팀 변경으로 전원 준비가 해제되었습니다.';}a.relocationEpoch=(a.relocationEpoch??0)+1;a.teamId=value;a.lastTeamChange=this.time;a.position={...position,y:0};a.recoveryCount++;a.lastPositionWriter='server:team-safe-reset';this.revision++;return null;
  }
  receive(id:string,value:unknown){const a=this.actors.get(id);if(!a)return false;
   if(this.time-a.rateAt>=1000){a.rateAt=this.time;a.rateCount=0;}if(++a.rateCount>NETWORK.maxMessagesPerSecond||!validInput(value))return false;
@@ -113,7 +146,8 @@ export class OnlineWorld{
    a.net.queueLength=a.moves.length;a.net.oldestAgeMs=a.moves.length?this.time-a.moves[0].at:0;
   }
   const starts=actors.map(a=>({...a.position}));
-  const recovering=actors.some(a=>!validBodyPosition(a.position,[]))||(actors.length===2&&Math.hypot(actors[0].position.x-actors[1].position.x,actors[0].position.z-actors[1].position.z)<2*BODY.radius-BODY.tolerance);
+  const recovering=actors.some(a=>!validBodyPosition(a.position,[]))||actors.some((a,i)=>actors.some((b,j)=>i<j&&Math.hypot(a.position.x-b.position.x,a.position.z-b.position.z)<2*BODY.radius-BODY.tolerance));
+  if(actors.length>2){const rotate=this.tick%actors.length;actors.push(...actors.splice(0,rotate));starts.splice(0,starts.length,...actors.map(a=>({...a.position})));}
   const movement:MovingActor[]=actors.map(a=>{const c=applied.get(a.id);return {position:a.position,vy:a.vy,phase:a.phase,input:c?.input??a.input,enabled:!a.sequencedMovement||!!c,jump:c?.jump??false,screen:a.screen};});
   const movementResult=integrateMovement(movement,dt);
   actors.forEach((a,i)=>{const command=applied.get(a.id);a.vy=movement[i].vy;
@@ -121,7 +155,7 @@ export class OnlineWorld{
    const recovered=recovering||movementResult.recovered;
    if(recovered)a.recoveryCount++;a.lastPositionWriter=recovered?'server:'+movementResult.reason:'server:fixed-movement';
    advanceLocomotion(a.locomotion,recovered?0:a.position.x-starts[i].x,recovered?0:a.position.z-starts[i].z,dt,a.input.yaw,a.position.y===0);
-  });if(this.match?.needsClear&&this.ownerId===this.match.attackId){const owner=this.actors.get(this.ownerId!);if(owner&&Math.hypot(owner.position.x-COURT.rim.x,owner.position.z-COURT.rim.z)>=CFG.arc)this.match.needsClear=false;}this.ballStep(actors,dt);
+  });if(this.match?.needsClear&&(this.match.teams?this.actors.get(this.ownerId??'')?.teamId===this.match.teams.attack:this.ownerId===this.match.attackId)){const owner=this.actors.get(this.ownerId!);if(owner&&Math.hypot(owner.position.x-COURT.rim.x,owner.position.z-COURT.rim.z)>=CFG.arc)this.match.needsClear=false;}this.ballStep(actors,dt);
   if(this.pendingAttack){const id=this.pendingAttack;this.pendingAttack=null;this.resetRound(id);}else if(this.match&&!matchPlayable(this.match))this.clearGameplay();
   for(const a of actors){const air=a.position.y>0||a.vy>0;
    if(air&&!this.airborne.has(a.id)){this.airborne.add(a.id);emitGameEvent(this.state,a.defense.kind==='BLOCK'?'blockJump':'jump',a.position,1,a.id);}
@@ -136,11 +170,12 @@ export class OnlineWorld{
    if(action==='screen'){toggleScreen(s,actionInput,[...this.actors.values()].filter(b=>b.id!==a.id).flatMap(b=>bodyShapes(b.id,b.position,b.screen)));continue;}
    if(action==='crossover'){requestCrossover(s);continue;}
    if(action==='steal'||action==='block'){a.screen.active=false;const button=action==='steal'?'shot':'pass';if(!a.buttons.has(button)){a.buttons.add(button);startDefense(s,actionInput,action==='steal'?'STEAL':'BLOCK');}continue;}
+   if(this.match?.teams&&this.match.needsClear&&(action==='shotDown'||action==='shotUp')){a.buttons.delete('shot');cancelAllCharges(s);s.message='외곽으로 공을 가져가세요';continue;}
    if(action==='shotDown'||action==='passDown'){const button=action==='shotDown'?'shot':'pass';if(a.buttons.has(button))continue;a.buttons.add(button);const ok=action==='shotDown'?startCharge(s):startPassCharge(s);if(ok){a.buttons.delete(button==='shot'?'pass':'shot');this.chargeVersions.set(a.id,this.possession);this.chargeStartedAt.set(a.id,this.time);}}
    if(action==='shotUp'||action==='passUp'){const button=action==='shotUp'?'shot':'pass',held=a.buttons.delete(button);if(held&&this.ownerId===a.id&&this.chargeVersions.get(a.id)===this.possession&&s.phase===(action==='shotUp'?'CHARGING':'PASS_CHARGING')&&!s.playerMotion.pending){const seconds=Math.max(0,(this.time-(this.chargeStartedAt.get(a.id)??this.time))/1000);if(action==='shotUp'){s.charge=Math.min(CFG.maxCharge,seconds);releaseShot(s,actionInput);}else{s.passCharge=Math.min(PASS.maxCharge,seconds);releasePass(s,actionInput);}}}
   }this.commit(a);
  }
- ordered(actors:OnlineActor[]){return this.tick%2?[...actors].reverse():actors;}
+ ordered(actors:OnlineActor[]){if(actors.length<=2)return this.tick%2?[...actors].reverse():actors;const sorted=[...actors].sort((a,b)=>a.slot-b.slot),offset=this.tick%sorted.length;return [...sorted.slice(offset),...sorted.slice(0,offset)];}
  acquire(a:OnlineActor,point:Vec,playCatch=true){const s=this.focus(a);giveBall(s,'player',point);if(playCatch)emitGameEvent(s,'catch',point,1,a.id);this.commit(a);this.state.message=this.match?'캐치 · 드리블 또는 슛':'캐치 · '+a.id.slice(0,5);}
  outcome(made:boolean){
   const s=this.state,m=this.match,shot=this.scoringShot;
@@ -153,8 +188,8 @@ export class OnlineWorld{
   const before=s.score;resolve(s,made,this.shooterId??undefined);
   if(s.score!==before&&this.shooterId){const actor=this.actors.get(this.shooterId),record=actor??this.ledger.get(this.shooterId);if(record){record.score+=s.score-before;record.made++;}
    if(m){m.scores[this.shooterId]=(m.scores[this.shooterId]??0)+s.score-before;
-    if(m.scores[this.shooterId]>=MATCH.target)this.result(this.shooterId,'TARGET_SCORE');
-    else {const next=[...this.actors.keys()].find(id=>id!==this.shooterId);if(next)this.prepareAttack(next);}
+    if(m.teams&&shot?.shooterTeamId){m.teams.scores[shot.shooterTeamId]+=s.score-before;if(m.teams.scores[shot.shooterTeamId]>=MATCH.target)this.result(this.shooterId,'TARGET_SCORE');else{const next=this.teamServer(shot.shooterTeamId==='A'?'B':'A');if(next)this.prepareAttack(next);}}
+    else if(m.scores[this.shooterId]>=MATCH.target)this.result(this.shooterId,'TARGET_SCORE');else {const next=[...this.actors.keys()].find(id=>id!==this.shooterId);if(next)this.prepareAttack(next);}
    }
   }
  }
@@ -162,14 +197,15 @@ export class OnlineWorld{
   for(const a of actors){this.focus(a);if(this.ownerId!==a.id)updateUnownedMotion(a.motion,dt,a.locomotion.speed>.015);advanceDefense(s,a.input,dt);this.commit(a);}
   const owner=this.actors.get(this.ownerId??'');
   if(owner){this.focus(owner);if(owner.phase==='CHARGING'&&!owner.motion.pending)s.charge=Math.min(CFG.maxCharge,(this.time-(this.chargeStartedAt.get(owner.id)??this.time))/1000);if(owner.phase==='PASS_CHARGING'&&!owner.motion.pending)s.passCharge=Math.min(PASS.maxCharge,(this.time-(this.chargeStartedAt.get(owner.id)??this.time))/1000);
-   if(advanceControlledMotion(s,owner.input,'player',dt)){const kind=owner.motion.pending?.kind;firePendingPlayer(s);if(s.owner==='none'){this.lastTouchId=owner.id;this.passerId=owner.id;if(kind==='shot'){this.shooterId=owner.id;owner.attempts++;if(this.match)this.scoringShot={matchId:this.match.id,id:s.shotId,shooterId:owner.id,points:s.shotPoints+1,eligible:matchPlayable(this.match)&&this.match.attackId===owner.id&&!this.match.needsClear};}}}this.commit(owner);
+   if(this.match?.teams&&this.match.needsClear&&owner.motion.pending?.kind==='shot')cancelAllCharges(s);
+   if(advanceControlledMotion(s,owner.input,'player',dt)){const kind=owner.motion.pending?.kind;firePendingPlayer(s);if(s.owner==='none'){this.lastTouchId=owner.id;this.passerId=owner.id;this.flightTeam=owner.teamId;if(kind==='shot'){this.shooterId=owner.id;owner.attempts++;if(this.match)this.scoringShot={matchId:this.match.id,id:s.shotId,shooterId:owner.id,shooterTeamId:owner.teamId,points:s.shotPoints+1,eligible:matchPlayable(this.match)&&(this.match.teams?this.match.teams.attack===owner.teamId:this.match.attackId===owner.id)&&!this.match.needsClear};}}}this.commit(owner);
    if(this.ownerId===owner.id)s.ball=controlledPosition(s,owner.input,'player');
-   for(const defender of this.ordered(actors).filter(a=>a.id!==this.ownerId)){this.focus(defender);if(trySteal(s,defender.input)){emitGameEvent(s,'catch',s.ball,1,defender.id);this.commit(defender);}}
+   for(const defender of this.ordered(actors).filter(a=>a.id!==this.ownerId&&(!this.match?.teams||a.teamId!==this.actors.get(this.ownerId??'')?.teamId))){this.focus(defender);if(trySteal(s,defender.input)){emitGameEvent(s,'catch',s.ball,1,defender.id);this.commit(defender);}}
   }else{
    s.flight+=dt;
    advanceBall(s,dt,(prev,next,floor,collided,t0,t1)=>{
     if(s.flightKind==='shot'){if(floor||collided)s.shotTouched=true;const shooter=this.actors.get(this.shooterId??'');if(shooter){this.focus(shooter);if(outsideAcquisitionVolumes(s,shooter.input,prev)||outsideAcquisitionVolumes(s,shooter.input,next))s.shotExited=true;}}
-    for(const a of this.ordered(actors)){this.focus(a);if(!collided&&tryBlock(s,prev,next,t0,t1)){this.lastTouchId=a.id;emitGameEvent(s,'blockHit',s.ball,Math.hypot(s.ballVelocity.x,s.ballVelocity.y,s.ballVelocity.z),a.id);this.pickupLockedUntil=this.time+DEFENSE.block.pickupLock*1000;this.revision++;return;}}
+    for(const a of this.ordered(actors)){if(this.match?.teams&&a.teamId===this.flightTeam)continue;this.focus(a);if(!collided&&tryBlock(s,prev,next,t0,t1)){this.lastTouchId=a.id;emitGameEvent(s,'blockHit',s.ball,Math.hypot(s.ballVelocity.x,s.ballVelocity.y,s.ballVelocity.z),a.id);this.pickupLockedUntil=this.time+DEFENSE.block.pickupLock*1000;this.revision++;return;}}
     if(s.flightKind==='shot'&&!s.resolved){if(rimCrossing(prev,next))this.outcome(true);else if(floor)this.outcome(false);}
     if(this.match&&!matchPlayable(this.match))return false;
     if(s.flightKind==='pass'&&floor)makeLoose(s);
@@ -188,7 +224,7 @@ export class OnlineWorld{
      if(s.flightKind==='shot'&&!s.resolved)this.outcome(false);
      // Surface contacts do not change the last player touch. A block does.
      // Keep a departed actor's ID so the remaining opponent receives the ball.
-     const receiver=actors.find(a=>this.lastTouchId!==null&&a.id!==this.lastTouchId)??this.ordered(actors)[0];
+     const receiver=this.ordered(actors).find(a=>this.lastTouchId!==null&&a.id!==this.lastTouchId&&(!this.match?.teams||a.teamId!==this.actors.get(this.lastTouchId)?.teamId))??this.ordered(actors)[0];
      this.focus(receiver);giveBall(s,'player');s.ball=controlledPosition(s,receiver.input,'player');this.commit(receiver);
      if(this.match)this.prepareAttack(receiver.id);
      s.message='아웃 오브 바운드 · '+(receiver.nickname??(this.match?'다음 공격자':receiver.id.slice(0,5)))+' 공격';

@@ -7,7 +7,7 @@ export async function publicRooms():Promise<PublicRoom[]>{
  for(const listing of cached){
   const room=matchMaker.getLocalRoomById(listing.roomId) as BasketballRoom|undefined;
   if(!room||room.roomName!=='basketball'||room.directoryPrivate||!room.world.canJoin()||room.hasReachedMaxClients()||room.world.actors.size===0||room.world.actors.size>=room.maxClients)continue;
-  if(room.world.mode!=='duel'&&room.world.mode!=='practice')continue;
+  if(room.world.mode!=='duel'&&room.world.mode!=='practice'&&room.world.mode!=='practice2v2'&&room.world.mode!=='teamDuel')continue;
   rooms.push({roomId:room.roomId,roomName:room.directoryName,mode:room.world.mode,players:room.world.actors.size,maxPlayers:room.maxClients,status:'WAITING'});
   if(rooms.length>=ROOM_DIRECTORY.maxResults)break;
  }

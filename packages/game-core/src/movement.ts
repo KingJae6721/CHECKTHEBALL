@@ -1,5 +1,5 @@
 import {MOVEMENT} from './court';
-import {movePair,moveBody,bodyShapes} from './bodies';
+import {moveGroup,movePair,moveBody,bodyShapes} from './bodies';
 import {advanceScreen,type ScreenState} from './screen';
 import {CFG,type Vec,type Input,type Phase} from './simulation';
 export type MovingActor={position:Vec;vy:number;phase:Phase;input:Input;enabled:boolean;jump:boolean;screen?:ScreenState};
@@ -9,7 +9,7 @@ export function integrateMovement(actors:MovingActor[],dt=CFG.dt){
  const deltas=actors.map(a=>{const i=a.input,length=Math.max(1,Math.hypot(i.x,i.z)),speed=(i.sprint?MOVEMENT.run:MOVEMENT.walk)*(a.phase==='CHARGING'?MOVEMENT.chargeScale:1)*(a.position.y>0?MOVEMENT.airScale:1);
   return a.enabled?{x:(i.x*Math.cos(i.yaw)+i.z*Math.sin(i.yaw))/length*speed*dt,z:(-i.x*Math.sin(i.yaw)+i.z*Math.cos(i.yaw))/length*speed*dt}:{x:0,z:0};});
  const diagnostics={recovered:false,reason:'movement'};
- const positions=actors.some(a=>a.screen?.active)?actors.map((a,i)=>{
+ const positions=actors.length>2?moveGroup(actors.map(a=>a.position),deltas,actors.map(a=>a.screen),diagnostics):actors.some(a=>a.screen?.active)?actors.map((a,i)=>{
   if(a.screen?.active||!a.enabled)return {...a.position};
   const obstacles=actors.flatMap((b,j)=>i===j?[]:bodyShapes('actor-'+j,b.position,b.screen));
   const result=moveBody(a.position,deltas[i],obstacles);
