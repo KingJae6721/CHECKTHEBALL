@@ -1,3 +1,4 @@
+import {createBasketball} from './createBasketball';
 import {ArcRotateCamera,Color3,Color4,DirectionalLight,Engine,HemisphericLight,MeshBuilder,Scene,SceneInstrumentation,StandardMaterial,UniversalCamera,Vector3} from '@babylonjs/core';
 import {createCharacter,type CharacterAppearance} from './createCharacter';
 import {characterPose,requestCrossover} from '../../../packages/game-core/src/motion';
@@ -35,9 +36,8 @@ export function createCharacterPreview(canvas:HTMLCanvasElement){
  function build(){scene?.dispose();scene=new Scene(engine);scene.clearColor=new Color4(.065,.09,.12,1);const h=new HemisphericLight('sky',Vector3.Up(),scene);h.intensity=.85;h.groundColor=new Color3(.18,.22,.25);const sun=new DirectionalLight('sun',new Vector3(-.4,-1,.5),scene);sun.intensity=1.25;sun.diffuse=new Color3(1,.89,.72);
   if(config.view==='firstPerson'){const c=new UniversalCamera('first-person',new Vector3(0,CFG.eye,0),scene);c.inputs.clear();c.minZ=.06;c.fov=1.22;scene.activeCamera=c;}else{const alpha=config.view==='front'?Math.PI/2:config.view==='back'?-Math.PI/2:0,c=new ArcRotateCamera('comparison',alpha,1.40,config.count===8?8:4.8,new Vector3(0,1.4,config.count===8?.8:0),scene);c.minZ=.03;scene.activeCamera=c;}
   const floor=MeshBuilder.CreateGround('floor',{width:20,height:20},scene),fm=new StandardMaterial('floor',scene);fm.diffuseColor=Color3.FromHexString('#3f5553');floor.material=fm;floor.position.y=COURT.floorY;
-  const bm=new StandardMaterial('ball',scene);bm.diffuseColor=Color3.FromHexString('#db762c');
   rigs=Array.from({length:config.count},(_,i)=>createCharacter(scene,{name:'preview-'+i,firstPerson:config.view==='firstPerson',appearance:config.appearance==='legacy'?'legacy':'minimal'}));for(const r of rigs)r.root.setEnabled(config.appearance!=='hidden');
-  balls=rigs.map((_,i)=>{const m=MeshBuilder.CreateSphere('ball-'+i,{diameter:COURT.ballRadius*2,segments:12},scene);m.material=bm;return m;});instrument=new SceneInstrumentation(scene);seed();for(let t=0;t<config.time-CFG.dt/2;t+=CFG.dt)step();display();frames.clear();cpu.clear();frameCount=0;accumulator=0;last=performance.now();
+  balls=rigs.map((_,i)=>createBasketball(scene,'ball-'+i));instrument=new SceneInstrumentation(scene);seed();for(let t=0;t<config.time-CFG.dt/2;t+=CFG.dt)step();display();frames.clear();cpu.clear();frameCount=0;accumulator=0;last=performance.now();
  }
  function configure(next:Partial<PreviewConfig>){config={...config,...next};build();}
  build();

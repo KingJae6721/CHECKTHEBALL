@@ -1,3 +1,4 @@
+import {createBasketball} from './createBasketball';
 import {teamMode} from '../../../packages/game-core/src/match';
 import {TEAM,type TeamId} from '../../../packages/game-core/src/teams';
 import {createRemoteCharacters} from './remoteCharacters';
@@ -43,7 +44,7 @@ export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,
  const hoopMeter=createHoopShotMeter(canvas,scene,camera);
  const gym=createIndoorGym(scene);
  function mat(name:string,hex:string,emission=0){const m=new StandardMaterial(name,scene);m.diffuseColor=Color3.FromHexString(hex);m.specularColor=new Color3(.08,.08,.08);m.emissiveColor=m.diffuseColor.scale(emission);return m;}
- const white=mat('markings','#efe8d6',.1),metal=mat('metal','#454c45'),orange=mat('rim','#e97132',.2),ballmat=mat('basketball','#d77a32'),dark=mat('seams','#4d321e');
+ const white=mat('markings','#efe8d6',.1),metal=mat('metal','#454c45'),orange=mat('rim','#e97132',.2);
  function line(name:string,pts:Vector3[],material=white,radius=.025){const m=MeshBuilder.CreateTube(name,{path:pts,radius,tessellation:6},scene);m.material=material;return m;}
  const pole=MeshBuilder.CreateCylinder('pole',{height:4.8,diameter:.18},scene);pole.position.set(0,2.4,7.5);pole.material=metal;
  const arm=MeshBuilder.CreateBox('support',{width:.15,height:.15,depth:1.5},scene);arm.position.set(0,3.8,6.9);arm.material=metal;
@@ -65,9 +66,7 @@ export function createGame(canvas:HTMLCanvasElement,onUpdate:(s:Snapshot)=>void,
   line('backboard-rear-brace',[new Vector3(side*.65,COURT.board.center.y-.34,COURT.board.center.z+.06),new Vector3(0,3.8,6.9)],metal,.025);
  }
  const net=createNet(scene,white);
- const ball=MeshBuilder.CreateSphere('ball',{diameter:CFG.ballRadius*2,segments:20},scene);ball.material=ballmat;
- for(const rot of[0,Math.PI/2]){const seam=MeshBuilder.CreateTorus('seam',{diameter:.239,thickness:.006,tessellation:40},scene);seam.parent=ball;seam.rotation.x=rot;seam.material=dark;}
- const seam=MeshBuilder.CreateTorus('seam',{diameter:.239,thickness:.006,tessellation:40},scene);seam.parent=ball;seam.rotation.z=Math.PI/2;seam.material=dark;
+ const ball=createBasketball(scene);
  // Development-only collider overlay; these meshes never drive simulation.
  const debugMeshes: Mesh[]=[];
  const acquisitionMeshes: Mesh[]=[];
