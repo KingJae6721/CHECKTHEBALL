@@ -1,4 +1,6 @@
 'use client';
+import PlayerLobby,{LobbyBackdrop,type LobbyAction} from './PlayerLobby';
+import './playerLobby.css';
 import TeamMatchPanel,{TeamScoreboard} from './TeamMatchPanel';
 import TeamPanel from './TeamPanel';
 import type {TeamId} from '../../../packages/game-core/src/teams';
@@ -23,7 +25,7 @@ export default function Game(){
  const canvas=useRef<HTMLCanvasElement>(null),runtime=useRef<ReturnType<typeof createGame>|null>(null),factory=useRef<typeof createGame|null>(null),sessionRef=useRef<OnlineSession|undefined>(undefined),gate=useRef(new ConnectionAttempt()),generation=useRef(0);
  const [quickSearching,setQuickSearching]=useState(false);
  const [preferredTeam,setPreferredTeam]=useState<TeamId|undefined>();
- const [onlinePage,setOnlinePage]=useState<OnlinePage>('MENU'),[listRefresh,setListRefresh]=useState(0);
+ const [onlinePage,setOnlinePage]=useState<OnlinePage>('LIST'),[listRefresh,setListRefresh]=useState(0);
  const [chatOpen,setChatOpen]=useState(false);
  const [screen,setScreen]=useState<MenuScreen>('HOME'),[panel,setPanel]=useState<'MAIN'|'SETTINGS'|'HELP'|'CREDITS'>('MAIN');
  const [state,setState]=useState(initial),[session,setSession]=useState<OnlineSession>(),[factoryReady,setFactoryReady]=useState(false),[sceneReady,setSceneReady]=useState(false),[hasPlayed,setHasPlayed]=useState(false);
@@ -56,9 +58,11 @@ export default function Game(){
  function changeColor(next:PlayerColor){const selected=playerColor(next);prefs.current.color=selected;setColor(selected);savePreference(storage(),PLAYER_COLOR_KEY,selected);runtime.current?.setCharacterColor(selected);}
  function changeCamera(next:boolean){prefs.current.camera=next;setCamera(next);savePreference(storage(),CAMERA_KEY,String(next));runtime.current?.setCameraMotion(next);}
  function openPanel(next:typeof panel){gate.current.cancel();if(connecting){setScreen('FRIENDS');}runtime.current?.pause();setPanel(next);}
- function home(){setQuickSearching(false);setChatOpen(false);gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;const left=sessionRef.current?.close();sessionRef.current=undefined;setSession(undefined);setSceneReady(false);setState(initial);setHasPlayed(false);setError('');setPanel('MAIN');setScreen('HOME');return left;}
+ function home(){setRoomMode(mode=>mode==='teamDuel'||mode==='practice2v2'?'teamDuel':'duel');setQuickSearching(false);setChatOpen(false);gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;const left=sessionRef.current?.close();sessionRef.current=undefined;setSession(undefined);setSceneReady(false);setState(initial);setHasPlayed(false);setError('');setPanel('MAIN');setScreen('HOME');return left;}
  async function leaveOnline(){const online=!!sessionRef.current,left=home();if(!online)return;const token=gate.current.begin();if(token===null)return;await left;if(gate.current.current(token)){setOnlinePage('LIST');setListRefresh(n=>n+1);setScreen('FRIENDS');gate.current.finish(token);}}
- function navigate(next:'FRIENDS'|'PRACTICE_SELECT'){if(!saveName())return;gate.current.cancel();void music.current?.activate();setError('');setPanel('MAIN');if(next==='FRIENDS')setOnlinePage('MENU');setScreen(next);}
+ function navigate(next:'PRACTICE_SELECT'){if(!saveName())return;gate.current.cancel();void music.current?.activate();setError('');setPanel('MAIN');setScreen(next);}
+ function browseLobby(page:LobbyAction){if(!saveName())return;gate.current.cancel();void music.current?.activate();setError('');setPanel('MAIN');setOnlinePage(page);setScreen('FRIENDS');}
+ function quickLobby(){if(roomMode==='teamDuel')void join(false,undefined,undefined,true);else browseLobby('LIST');}
  function enter(){void music.current?.activate();setError('');setPanel('MAIN');void runtime.current?.start();}
  function launch(online?:OnlineSession,autoStart=false){
   if(autoStart)void music.current?.activate();
@@ -70,25 +74,26 @@ export default function Game(){
  }
  async function join(create:boolean,target=roomId,settings?:RoomCreation,quick=false){
   if(!saveName())return;void music.current?.activate();if(!create&&!quick){const invalid=roomIdError(target);if(invalid){setError(invalid);return;}}
-  const token=gate.current.begin();if(token===null)return;setQuickSearching(quick);if(quick)setOnlinePage('MENU');setError('');setScreen('CONNECTING');
+  const token=gate.current.begin();if(token===null)return;setQuickSearching(quick);if(quick)setOnlinePage('LIST');setError('');setScreen('CONNECTING');
   try{const {connectOnline,connectQuickPlay}=await import('../game/onlineClient');if(!gate.current.current(token))return;const connected=quick?await connectQuickPlay(validateNickname(nickname).name,prefs.current.color,()=>gate.current.current(token)):await connectOnline(create?undefined:target.trim(),validateNickname(nickname).name,settings?.mode??roomMode,settings,prefs.current.color,preferredTeam);
    if(!gate.current.accept(token,connected))return;
    if(!factory.current){connected.close();setScreen('FRIENDS');setError('코트를 준비 중입니다. 다시 눌러주세요.');return;}
    sessionRef.current=connected;setSession(connected);setRoomId(connected.room.roomId);
    if(!launch(connected)){connected.close();sessionRef.current=undefined;setSession(undefined);setScreen('FRIENDS');}
-  }catch(e){if(gate.current.current(token)){setError(connectionError(e));setListRefresh(n=>n+1);setScreen('FRIENDS');}}finally{if(gate.current.current(token))setQuickSearching(false);gate.current.finish(token);}
+  }catch(e){if(gate.current.current(token)){setError(connectionError(e));setListRefresh(n=>n+1);setScreen(quick?'HOME':'FRIENDS');}}finally{if(gate.current.current(token))setQuickSearching(false);gate.current.finish(token);}
  }
  async function nextQuick(){const left=home(),token=gate.current.begin();if(token===null)return;await left;if(!gate.current.current(token))return;gate.current.finish(token);setRoomMode('teamDuel');await join(false,undefined,undefined,true);}
- function back(){setQuickSearching(false);gate.current.cancel();setError('');setScreen(connecting?'FRIENDS':'HOME');setPanel('MAIN');}
+ function back(){const next=connecting?(quickSearching?'HOME':'FRIENDS'):'HOME';setQuickSearching(false);gate.current.cancel();setError('');if(next==='HOME')setRoomMode(mode=>mode==='teamDuel'||mode==='practice2v2'?'teamDuel':'duel');setScreen(next);setPanel('MAIN');}
  function chooseScenario(next:PracticeMode){setScenario(next);if(playing&&!session)runtime.current?.scenario(next);}
  const ping=state.online?.pingMs,pingQuality=ping==null?'unknown':ping<=100?'good':ping<=200?'fair':'poor';
  const showCard=!chatOpen&&(!playing||!state.locked&&(!state.online?.match||panel!=='MAIN'));
  const chooser=<fieldset className="scenario-choices"><legend>연습 선택</legend>{Object.entries(scenarios).map(([id,item])=><label key={id}><input type="radio" name="scenario" value={id} checked={scenario===id} onChange={()=>chooseScenario(id as PracticeMode)}/><span><strong>{item.name}</strong><small>{item.description}</small></span></label>)}</fieldset>;
- return <main className={`game ${!playing||!state.locked?'menu-shell':''}`} onKeyDownCapture={e=>{if(e.code!=='Escape'&&(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement)&&!(e.target as HTMLElement).closest('.room-chat'))e.stopPropagation();}}>
+ return <main className={`game ${!playing||!state.locked?'menu-shell':''} ${!playing?'player-lobby-shell':''}`} onKeyDownCapture={e=>{if(e.code!=='Escape'&&(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement)&&!(e.target as HTMLElement).closest('.room-chat'))e.stopPropagation();}}>
   <canvas ref={canvas} hidden={!playing} aria-label="농구 코트"/>
-  {!playing&&<div className="home-backdrop" aria-hidden="true"><svg viewBox="0 0 760 800"><path d="M35 765V40H725V765ZM35 445H725M270 40V280H490V40M270 280A110 110 0 0 0 490 280M70 40V115A310 310 0 0 0 690 115V40"/><circle cx="380" cy="95" r="18"/><path className="home-rim" d="M340 65H420M362 95H398"/></svg></div>}
+  {!playing&&<LobbyBackdrop color={color} nickname={nickname}/>}
   <div className="vignette"/>
   <header className="topbar"><button className="brand brand-button" onClick={home} aria-label="CheckTheBall 첫 화면">◉ CheckTheBall<span className="brand-slash">/</span></button><div className="top-right">
+   {!playing&&<div className="lobby-profile"><label htmlFor="lobby-nickname">게스트 닉네임 <span aria-hidden="true">✎</span></label><input id="lobby-nickname" aria-label="게스트 닉네임" aria-describedby="nickname-note nickname-error" aria-invalid={!!nicknameError} value={nickname} maxLength={NICKNAME_MAX} onChange={e=>{setNickname(e.target.value);setNicknameError('');}} onBlur={()=>{if(profileReady)saveName();}} autoComplete="nickname"/><small id="nickname-note">1~20자 · 게스트</small><span id="nickname-error" role={nicknameError?'alert':undefined}>{nicknameError}</span></div>}
    {playing&&state.online&&<span className={`network-ping ${pingQuality}`} title={state.online.pingStatus} aria-label={ping==null?state.online.pingStatus:`핑 ${ping}ms`}>{ping??'--'}<small>ms</small></span>}
    {playing&&(state.online?.mode==='practice2v2'||state.online?.mode==='teamDuel')&&!chatOpen&&<button className="menu-utility" onClick={()=>{setPanel('MAIN');runtime.current?.pause('TEAM_PANEL');}}>내 팀 {state.online.players.find(p=>p.id===state.online?.selfId)?.teamId??'-'} · 팀 선택</button>}
    <button className="menu-utility" onClick={()=>openPanel('SETTINGS')}>설정</button><button className="menu-utility" onClick={()=>openPanel('HELP')}>조작 안내</button>
@@ -97,16 +102,12 @@ export default function Game(){
   {playing&&state.online?.mode==='practice2v2'&&session&&panel==='MAIN'&&<TeamPanel state={state.online} session={session} compact/>}
   {playing&&(state.locked||chatOpen)&&panel==='MAIN'&&<GameHud state={state} onReset={()=>runtime.current?.reset()}/>}
   {playing&&<ScoreBurst state={state} color={color}/>}
-  {showCard&&<div className="menu-layer"><section className="menu-card" aria-label={panel==='SETTINGS'?'설정':panel==='HELP'?'조작 안내':panel==='CREDITS'?'크레딧':'시작 메뉴'}>
+  {showCard&&<div className="menu-layer"><section className={`menu-card ${!playing?'lobby-menu-panel':''}`}  aria-label={panel==='SETTINGS'?'설정':panel==='HELP'?'조작 안내':panel==='CREDITS'?'크레딧':'시작 메뉴'}>
    {panel==='SETTINGS'?<Settings color={color} onColor={changeColor} onMusic={()=>void music.current?.activate()} audio={audio} camera={camera} onAudio={changeAudio} onCamera={changeCamera} onBack={()=>setPanel('MAIN')}/>:
     panel==='HELP'?<Help online={!!session} onBack={()=>setPanel('MAIN')}/>:
     panel==='CREDITS'?<Credits onBack={()=>setPanel('MAIN')}/>:
-    screen==='HOME'?<><span className="eyebrow">PICK UP. PLAY.</span><h1 tabIndex={-1} data-menu-title>내 코트, 내 리듬.</h1><p>친구와 한 판, 혼자서 한 번 더.<br/>가볍게 시작하는 1인칭 농구.</p>
-     <label className="nickname-field">게스트 닉네임<input aria-label="게스트 닉네임" aria-describedby="nickname-note nickname-error" aria-invalid={!!nicknameError} value={nickname} maxLength={NICKNAME_MAX} onChange={e=>{setNickname(e.target.value);setNicknameError('');}} onBlur={()=>{if(profileReady)saveName();}} autoComplete="nickname"/></label>
-     <small id="nickname-note">1~20자 · 표시 이름이며 로그인 없이 플레이합니다.</small><p id="nickname-error" className="menu-error" role={nicknameError?'alert':undefined}>{nicknameError}</p>
-     <button className="menu-primary" disabled={!profileReady} onClick={()=>navigate('FRIENDS')}>온라인 플레이</button><button className="menu-secondary" disabled={!profileReady} onClick={()=>navigate('PRACTICE_SELECT')}>혼자 연습</button><button className="menu-text" onClick={()=>setPanel('CREDITS')}>크레딧</button>
-    </>:
-    screen==='FRIENDS'||connecting?<OnlineMenu page={onlinePage} onPage={page=>{setError('');setOnlinePage(page);}} nickname={nickname} roomId={roomId} onRoomId={setRoomId} mode={roomMode} onMode={setRoomMode} onQuick={()=>{setRoomMode('teamDuel');void join(false,undefined,undefined,true);}} quickSearching={quickSearching} preferredTeam={preferredTeam} onTeam={setPreferredTeam} connecting={connecting} ready={factoryReady} refreshKey={listRefresh} onCreate={settings=>void join(true,undefined,settings)} onJoin={id=>void join(false,id)} onBack={back}/>:
+    screen==='HOME'?<PlayerLobby mode={roomMode} onMode={setRoomMode} onQuick={quickLobby} onBrowse={browseLobby} onPractice={()=>navigate('PRACTICE_SELECT')} onCredits={()=>setPanel('CREDITS')} ready={profileReady&&factoryReady}/>:
+    screen==='FRIENDS'||connecting?<OnlineMenu page={onlinePage} onPage={page=>{setError('');setOnlinePage(page);}} nickname={nickname} roomId={roomId} onRoomId={setRoomId} mode={roomMode} onMode={setRoomMode} quickSearching={quickSearching} preferredTeam={preferredTeam} onTeam={setPreferredTeam} connecting={connecting} ready={factoryReady} refreshKey={listRefresh} onCreate={settings=>void join(true,undefined,settings)} onJoin={id=>void join(false,id)} onBack={back}/>:
     screen==='PRACTICE_SELECT'?<><h2 tabIndex={-1} data-menu-title>혼자 연습</h2>{chooser}<button className="menu-primary" disabled={!factoryReady} onClick={()=>launch(undefined,true)}>{factoryReady?'연습 시작':'코트 준비 중…'}</button><button className="menu-text" onClick={back}>뒤로</button></>:
     <><h2 tabIndex={-1} data-menu-title>{hasPlayed?'플레이 메뉴':'코트 준비 완료'}</h2>{session?<><RoomInvite code={session.room.roomId}/>{state.online?.mode==='practice2v2'&&<TeamPanel state={state.online} session={session}/>}<p>{state.online?.connected===false?'연결이 끊겼습니다.':(state.online?.count??0)<2?'친구가 참가하기를 기다립니다.':'친구가 참가했습니다.'}</p><p>온라인에서는 메뉴를 열어도 경기가 계속됩니다.</p></>:chooser}
      <button className="menu-primary" disabled={!sceneReady||!!session&&!session.connected} onClick={enter}>{hasPlayed?'계속하기':'코트에서 플레이'}</button>{!session&&<button className="menu-secondary" onClick={()=>runtime.current?.reset()}>현재 연습 재시도</button>}
