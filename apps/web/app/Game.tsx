@@ -21,6 +21,7 @@ const initial:Snapshot={defense:createDefense(),practice:createPractice(),passCh
 function storage():Store|undefined{try{return window.localStorage;}catch{return undefined;}}
 export default function Game(){
  const canvas=useRef<HTMLCanvasElement>(null),runtime=useRef<ReturnType<typeof createGame>|null>(null),factory=useRef<typeof createGame|null>(null),sessionRef=useRef<OnlineSession|undefined>(undefined),gate=useRef(new ConnectionAttempt()),generation=useRef(0);
+ const [quickSearching,setQuickSearching]=useState(false);
  const [preferredTeam,setPreferredTeam]=useState<TeamId|undefined>();
  const [onlinePage,setOnlinePage]=useState<OnlinePage>('MENU'),[listRefresh,setListRefresh]=useState(0);
  const [chatOpen,setChatOpen]=useState(false);
@@ -55,7 +56,7 @@ export default function Game(){
  function changeColor(next:PlayerColor){const selected=playerColor(next);prefs.current.color=selected;setColor(selected);savePreference(storage(),PLAYER_COLOR_KEY,selected);runtime.current?.setCharacterColor(selected);}
  function changeCamera(next:boolean){prefs.current.camera=next;setCamera(next);savePreference(storage(),CAMERA_KEY,String(next));runtime.current?.setCameraMotion(next);}
  function openPanel(next:typeof panel){gate.current.cancel();if(connecting){setScreen('FRIENDS');}runtime.current?.pause();setPanel(next);}
- function home(){setChatOpen(false);gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;const left=sessionRef.current?.close();sessionRef.current=undefined;setSession(undefined);setSceneReady(false);setState(initial);setHasPlayed(false);setError('');setPanel('MAIN');setScreen('HOME');return left;}
+ function home(){setQuickSearching(false);setChatOpen(false);gate.current.cancel();generation.current++;runtime.current?.dispose();runtime.current=null;const left=sessionRef.current?.close();sessionRef.current=undefined;setSession(undefined);setSceneReady(false);setState(initial);setHasPlayed(false);setError('');setPanel('MAIN');setScreen('HOME');return left;}
  async function leaveOnline(){const online=!!sessionRef.current,left=home();if(!online)return;const token=gate.current.begin();if(token===null)return;await left;if(gate.current.current(token)){setOnlinePage('LIST');setListRefresh(n=>n+1);setScreen('FRIENDS');gate.current.finish(token);}}
  function navigate(next:'FRIENDS'|'PRACTICE_SELECT'){if(!saveName())return;gate.current.cancel();void music.current?.activate();setError('');setPanel('MAIN');if(next==='FRIENDS')setOnlinePage('MENU');setScreen(next);}
  function enter(){void music.current?.activate();setError('');setPanel('MAIN');void runtime.current?.start();}
@@ -67,17 +68,18 @@ export default function Game(){
   try{const rt=factory.current(canvas.current,s=>{if(id===generation.current){setState(s);if(s.locked)setHasPlayed(true);}},e=>{if(id===generation.current)setError(e);},online,prefs.current.color);runtime.current=rt;rt.setAudio(prefs.current.audio);rt.setCameraMotion(prefs.current.camera);if(!online)rt.scenario(scenario);setSceneReady(true);setPanel('MAIN');setScreen('PLAYING');if(autoStart)void rt.start();return true;}
   catch{generation.current++;runtime.current?.dispose();runtime.current=null;canvas.current.hidden=true;setError('코트를 열지 못했습니다. 하드웨어 가속과 WebGL 지원을 확인해주세요.');return false;}
  }
- async function join(create:boolean,target=roomId,settings?:RoomCreation){
-  if(!saveName())return;void music.current?.activate();if(!create){const invalid=roomIdError(target);if(invalid){setError(invalid);return;}}
-  const token=gate.current.begin();if(token===null)return;setError('');setScreen('CONNECTING');
-  try{const {connectOnline}=await import('../game/onlineClient');if(!gate.current.current(token))return;const connected=await connectOnline(create?undefined:target.trim(),validateNickname(nickname).name,settings?.mode??roomMode,settings,prefs.current.color,preferredTeam);
+ async function join(create:boolean,target=roomId,settings?:RoomCreation,quick=false){
+  if(!saveName())return;void music.current?.activate();if(!create&&!quick){const invalid=roomIdError(target);if(invalid){setError(invalid);return;}}
+  const token=gate.current.begin();if(token===null)return;setQuickSearching(quick);if(quick)setOnlinePage('MENU');setError('');setScreen('CONNECTING');
+  try{const {connectOnline,connectQuickPlay}=await import('../game/onlineClient');if(!gate.current.current(token))return;const connected=quick?await connectQuickPlay(validateNickname(nickname).name,prefs.current.color,()=>gate.current.current(token)):await connectOnline(create?undefined:target.trim(),validateNickname(nickname).name,settings?.mode??roomMode,settings,prefs.current.color,preferredTeam);
    if(!gate.current.accept(token,connected))return;
    if(!factory.current){connected.close();setScreen('FRIENDS');setError('코트를 준비 중입니다. 다시 눌러주세요.');return;}
    sessionRef.current=connected;setSession(connected);setRoomId(connected.room.roomId);
    if(!launch(connected)){connected.close();sessionRef.current=undefined;setSession(undefined);setScreen('FRIENDS');}
-  }catch(e){if(gate.current.current(token)){setError(connectionError(e));setListRefresh(n=>n+1);setScreen('FRIENDS');}}finally{gate.current.finish(token);}
+  }catch(e){if(gate.current.current(token)){setError(connectionError(e));setListRefresh(n=>n+1);setScreen('FRIENDS');}}finally{if(gate.current.current(token))setQuickSearching(false);gate.current.finish(token);}
  }
- function back(){gate.current.cancel();setError('');setScreen(connecting?'FRIENDS':'HOME');setPanel('MAIN');}
+ async function nextQuick(){const left=home(),token=gate.current.begin();if(token===null)return;await left;if(!gate.current.current(token))return;gate.current.finish(token);setRoomMode('teamDuel');await join(false,undefined,undefined,true);}
+ function back(){setQuickSearching(false);gate.current.cancel();setError('');setScreen(connecting?'FRIENDS':'HOME');setPanel('MAIN');}
  function chooseScenario(next:PracticeMode){setScenario(next);if(playing&&!session)runtime.current?.scenario(next);}
  const ping=state.online?.pingMs,pingQuality=ping==null?'unknown':ping<=100?'good':ping<=200?'fair':'poor';
  const showCard=!chatOpen&&(!playing||!state.locked&&(!state.online?.match||panel!=='MAIN'));
@@ -104,7 +106,7 @@ export default function Game(){
      <small id="nickname-note">1~20자 · 표시 이름이며 로그인 없이 플레이합니다.</small><p id="nickname-error" className="menu-error" role={nicknameError?'alert':undefined}>{nicknameError}</p>
      <button className="menu-primary" disabled={!profileReady} onClick={()=>navigate('FRIENDS')}>온라인 플레이</button><button className="menu-secondary" disabled={!profileReady} onClick={()=>navigate('PRACTICE_SELECT')}>혼자 연습</button><button className="menu-text" onClick={()=>setPanel('CREDITS')}>크레딧</button>
     </>:
-    screen==='FRIENDS'||connecting?<OnlineMenu page={onlinePage} onPage={page=>{setError('');setOnlinePage(page);}} nickname={nickname} roomId={roomId} onRoomId={setRoomId} mode={roomMode} onMode={setRoomMode} preferredTeam={preferredTeam} onTeam={setPreferredTeam} connecting={connecting} ready={factoryReady} refreshKey={listRefresh} onCreate={settings=>void join(true,undefined,settings)} onJoin={id=>void join(false,id)} onBack={back}/>:
+    screen==='FRIENDS'||connecting?<OnlineMenu page={onlinePage} onPage={page=>{setError('');setOnlinePage(page);}} nickname={nickname} roomId={roomId} onRoomId={setRoomId} mode={roomMode} onMode={setRoomMode} onQuick={()=>{setRoomMode('teamDuel');void join(false,undefined,undefined,true);}} quickSearching={quickSearching} preferredTeam={preferredTeam} onTeam={setPreferredTeam} connecting={connecting} ready={factoryReady} refreshKey={listRefresh} onCreate={settings=>void join(true,undefined,settings)} onJoin={id=>void join(false,id)} onBack={back}/>:
     screen==='PRACTICE_SELECT'?<><h2 tabIndex={-1} data-menu-title>혼자 연습</h2>{chooser}<button className="menu-primary" disabled={!factoryReady} onClick={()=>launch(undefined,true)}>{factoryReady?'연습 시작':'코트 준비 중…'}</button><button className="menu-text" onClick={back}>뒤로</button></>:
     <><h2 tabIndex={-1} data-menu-title>{hasPlayed?'플레이 메뉴':'코트 준비 완료'}</h2>{session?<><RoomInvite code={session.room.roomId}/>{state.online?.mode==='practice2v2'&&<TeamPanel state={state.online} session={session}/>}<p>{state.online?.connected===false?'연결이 끊겼습니다.':(state.online?.count??0)<2?'친구가 참가하기를 기다립니다.':'친구가 참가했습니다.'}</p><p>온라인에서는 메뉴를 열어도 경기가 계속됩니다.</p></>:chooser}
      <button className="menu-primary" disabled={!sceneReady||!!session&&!session.connected} onClick={enter}>{hasPlayed?'계속하기':'코트에서 플레이'}</button>{!session&&<button className="menu-secondary" onClick={()=>runtime.current?.reset()}>현재 연습 재시도</button>}
@@ -113,7 +115,7 @@ export default function Game(){
    {error&&<p className="menu-error" role="alert">{error}</p>}<p className="desktop-note">데스크톱 키보드와 마우스로 플레이해주세요. 모바일 조작은 지원하지 않습니다.</p>
   </section></div>}
   {playing&&state.online?.match&&!state.online.match.teams&&!chatOpen&&panel==='MAIN'&&<MatchPanel error={error} roomCode={state.online.roomId} match={state.online.match} players={state.online.players} selfId={state.online.selfId} remainingMs={state.online.remainingMs??0} locked={state.locked} connected={state.online.connected} onIntent={intent=>session?.matchIntent(intent)} onEnter={enter} onLeave={leaveOnline} onSettings={()=>openPanel('SETTINGS')} onHelp={()=>openPanel('HELP')}/>}
-  {playing&&state.online?.match?.teams&&session&&!chatOpen&&panel==='MAIN'&&<TeamMatchPanel state={state.online} session={session} locked={state.locked} onEnter={enter} onLeave={leaveOnline} onSettings={()=>openPanel('SETTINGS')} onHelp={()=>openPanel('HELP')}/>}
+  {playing&&state.online?.match?.teams&&session&&!chatOpen&&panel==='MAIN'&&<TeamMatchPanel state={state.online} session={session} locked={state.locked} onEnter={enter} onQuick={()=>void nextQuick()} onLeave={leaveOnline} onSettings={()=>openPanel('SETTINGS')} onHelp={()=>openPanel('HELP')}/>}
   {playing&&state.online?.match?.teams&&panel==='MAIN'&&<TeamScoreboard state={state.online}/>}
   {playing&&session&&panel==='MAIN'&&<RoomChat key={session.room.sessionId} session={session} onBegin={()=>runtime.current?.pause('CHAT')} onOpenChange={setChatOpen} onClose={()=>{if(session.canPlay)enter();}}/>}
   {playing&&state.audioFailed&&!audio.muted&&audio.volume>0&&<button className="audio-recovery" onClick={()=>runtime.current?.unlockAudio()}>소리가 켜지지 않았습니다 · 눌러서 다시 켜기</button>}

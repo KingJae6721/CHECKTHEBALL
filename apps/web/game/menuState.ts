@@ -12,7 +12,8 @@ export function loadPreferences(store:Store|undefined,suggestion:string){
 }
 export function roomIdError(value:string){return /^[a-zA-Z0-9_-]{4,64}$/.test(value.trim())?null:'Room ID를 확인해주세요. 영문·숫자·-·_로 된 초대 코드를 입력하세요.';}
 export function connectionError(error:unknown){
- const e=error as {code?:number;message?:string},message=e?.message??'';
+ const e=error as {code?:number|string;message?:string},message=e?.message??'';
+ if(e?.code==='QUICK_UI')return message;
  if(message.includes('TEAM_FULL'))return '선택한 팀이 가득 찼습니다. 자동 배정이나 다른 팀으로 다시 참가해주세요.';
  if(message.includes('NO_SAFE_SPAWN'))return '안전한 시작 위치가 없습니다. 잠시 후 다시 참가해주세요.';
  if(message.includes('INVALID_TEAM'))return '참가할 팀을 다시 선택해주세요.';

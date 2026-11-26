@@ -1,3 +1,4 @@
+import {QuickPlay,QuickError} from './quickPlay';
 import {createEndpoint,createRouter,matchMaker} from '@colyseus/core';
 import {ROOM_DIRECTORY,type PublicRoom} from '../../../packages/protocol/src/rooms';
 import type {BasketballRoom} from './server';
@@ -14,7 +15,13 @@ export async function publicRooms():Promise<PublicRoom[]>{
  return rooms;
 }
 export function directoryRouter(webOrigins:readonly string[]){
- return createRouter({publicRooms:createEndpoint('/public-rooms',{method:'GET'},async ctx=>{
+ const quick=new QuickPlay();
+ return createRouter({quickPlay:createEndpoint('/quick-play',{method:'POST'},async ctx=>{
+  if(!ctx.request)return new Response(null,{status:400});const origin=ctx.request.headers.get('origin'),sameOrigin=new URL(ctx.request.url).origin;
+  const headers:Record<string,string>={'Content-Type':'application/json','Cache-Control':'no-store',Vary:'Origin','Access-Control-Allow-Origin':origin&&(origin===sameOrigin||webOrigins.includes(origin))?origin:sameOrigin,'Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'Content-Type'};
+  if(origin&&origin!==sameOrigin&&!webOrigins.includes(origin))return new Response(null,{status:403,headers});if(ctx.request.method==='OPTIONS')return new Response(null,{status:204,headers});if(ctx.request.method!=='POST')return new Response(null,{status:405,headers});
+  try{const reservation=await quick.request(ctx.body);return new Response(JSON.stringify(reservation),{headers});}catch(error){return new Response(JSON.stringify({error:error instanceof QuickError?error.code:'QUICK_UNAVAILABLE'}),{status:error instanceof QuickError?error.status:503,headers});}
+ }),publicRooms:createEndpoint('/public-rooms',{method:'GET'},async ctx=>{
   if(!ctx.request)return new Response(null,{status:400});
   const origin=ctx.request.headers.get('origin'),sameOrigin=new URL(ctx.request.url).origin;
   const headers:Record<string,string>={'Content-Type':'application/json','Cache-Control':'no-store','Vary':'Origin','Access-Control-Allow-Origin':origin&&(origin===sameOrigin||webOrigins.includes(origin))?origin:sameOrigin};
